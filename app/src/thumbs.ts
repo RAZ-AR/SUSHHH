@@ -1,57 +1,142 @@
-// Статичные мини-портреты на Canvas 2D для сторис и карточек потоков:
-// WebGL-контекстов в браузере мало, а превью нужно много.
+// Статичная графика на Canvas 2D: мини-кольца из точек (сторис, строки)
+// и ступенчатый график записи (потоки, прогресс в плеере).
 
-import type { Palette } from "./visual";
+import { ACCENT } from "./visual";
 
-export function drawPortrait(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, p: Palette, gain = 1) {
+const INK = "#111111";
+const DOT = "#9A9A98";
+const LINE = "#B9B9B6";
+const MONO = '"JetBrains Mono", ui-monospace, monospace';
+
+function setup(canvas: HTMLCanvasElement) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.round(canvas.clientWidth * dpr);
   const h = Math.round(canvas.clientHeight * dpr);
-  if (!w || !h) return;
-  canvas.width = w;
-  canvas.height = h;
+  if (!w || !h) return null;
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
   const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, dpr };
+}
 
-  const bg = ctx.createLinearGradient(0, 0, 0, h);
-  bg.addColorStop(0, p.bgTop);
-  bg.addColorStop(1, p.bgBot);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
-
-  const n = env?.length ?? 0;
-  if (!n) return;
-  const m = w * 0.06;
-  const bw = (w - 2 * m) / n;
+// мини «кольцо расхождения»: тонкий круг, распушённый там, где в записи голос
+export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, dark = false) {
+  const s = setup(canvas);
+  if (!s) return;
+  const { ctx, w, h, dpr } = s;
+  const cx = w / 2;
   const cy = h / 2;
-
+  const R = Math.min(w, h) * 0.3;
+  const col = dark ? "17,17,17" : "150,150,148";
+  ctx.strokeStyle = `rgba(${col},0.9)`;
+  ctx.lineWidth = 1 * dpr;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.stroke();
+  if (!env?.length) return;
+  ctx.lineWidth = 0.6 * dpr;
+  const n = 260;
   for (let i = 0; i < n; i++) {
-    const a = env![i];
-    const half = (0.03 + a * 0.3 * gain) * h * 1.35;
-    const g = ctx.createLinearGradient(0, cy - half, 0, cy + half);
-    g.addColorStop(0, hexA(p.edge, 0));
-    g.addColorStop(0.18, p.edge);
-    g.addColorStop(0.36, p.mid);
-    g.addColorStop(0.5, p.core);
-    g.addColorStop(0.64, p.mid);
-    g.addColorStop(0.82, p.edge);
-    g.addColorStop(1, hexA(p.edge, 0));
-    ctx.fillStyle = g;
-    ctx.fillRect(m + i * bw, cy - half, bw + 0.6, half * 2);
-    // тень у левого края полосы — те же «рёбра», что в шейдере
-    ctx.fillStyle = "rgba(0,0,0,0.06)";
-    ctx.fillRect(m + i * bw, cy - half, bw * 0.18, half * 2);
+    const t = i / n;
+    const e = env[Math.min(env.length - 1, Math.floor(t * env.length))];
+    if (e < 0.05) continue;
+    // детерминированный «шум», чтобы превью не мерцали при перерисовке
+    const r1 = Math.sin(i * 12.9898) * 43758.5453;
+    const k = r1 - Math.floor(r1);
+    const side = k < 0.72 ? 1 : -1;
+    const L = e * e * R * 0.55 * Math.pow(k, 1.4);
+    const a = t * Math.PI * 2 - Math.PI / 2;
+    ctx.strokeStyle = `rgba(${col},${0.25 + 0.5 * k})`;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+    ctx.lineTo(cx + Math.cos(a) * (R + side * L), cy + Math.sin(a) * (R + side * L));
+    ctx.stroke();
   }
 }
 
-function hexA(hex: string, a: number) {
-  const v = parseInt(hex.slice(1), 16);
-  return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a})`;
+// огибающая → n ступеней (среднее по участку)
+export function toSteps(env: ArrayLike<number>, n: number) {
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor((i * env.length) / n);
+    const b = Math.max(a + 1, Math.floor(((i + 1) * env.length) / n));
+    let sum = 0;
+    for (let j = a; j < b; j++) sum += env[j];
+    out.push(sum / (b - a));
+  }
+  return out;
 }
 
-// склеивает огибающие нескольких записей в одну полосу из n значений;
-// между записями — пауза, чтобы было видно, сколько голосов в потоке
+type StepOpts = { steps?: number; progress?: number; top?: string; left?: string; right?: string };
+
+// ступенчатый график; текущая ступень — оранжевая с заливкой вниз
+export function drawSteps(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, o: StepOpts = {}) {
+  const s = setup(canvas);
+  if (!s) return;
+  const { ctx, w, h, dpr } = s;
+  const n = o.steps ?? 14;
+  const vals = env ? toSteps(env, n) : new Array(n).fill(0.15);
+  const max = Math.max(...vals, 0.001);
+  const labels = !!(o.top || o.left || o.right);
+  const padTop = labels ? 22 * dpr : 4 * dpr;
+  const base = h - 4 * dpr;
+  const sw = w / n;
+  const y = (v: number) => base - (v / max) * (base - padTop) * 0.85 - 2 * dpr;
+  const cur = o.progress === undefined ? -1 : Math.min(n - 1, Math.floor(o.progress * n));
+
+  // заливка текущей ступени
+  if (cur >= 0) {
+    const g = ctx.createLinearGradient(0, y(vals[cur]), 0, base);
+    g.addColorStop(0, "rgba(255,91,31,0.32)");
+    g.addColorStop(1, "rgba(255,91,31,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(cur * sw, y(vals[cur]), sw, base - y(vals[cur]));
+  }
+
+  // линия-ступенька
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.strokeStyle = LINE;
+  ctx.beginPath();
+  vals.forEach((v, i) => {
+    const yy = y(v);
+    if (i === 0) ctx.moveTo(0, yy);
+    else ctx.lineTo(i * sw, yy);
+    ctx.lineTo((i + 1) * sw, yy);
+  });
+  ctx.stroke();
+
+  if (cur >= 0) {
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 3 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(cur * sw, y(vals[cur]));
+    ctx.lineTo((cur + 1) * sw, y(vals[cur]));
+    ctx.stroke();
+  }
+
+  if (labels) {
+    ctx.font = `400 ${9.5 * dpr}px ${MONO}`;
+    ctx.textBaseline = "top";
+    ctx.fillStyle = DOT;
+    if (o.left) ctx.fillText(o.left, 0, 2 * dpr);
+    if (o.right) {
+      ctx.textAlign = "right";
+      ctx.fillText(o.right, w, 2 * dpr);
+      ctx.textAlign = "left";
+    }
+    if (o.top && cur >= 0) {
+      ctx.fillStyle = INK;
+      ctx.textBaseline = "bottom";
+      const x = Math.min(Math.max(cur * sw, 0), w - ctx.measureText(o.top).width);
+      ctx.fillText(o.top, x, y(vals[cur]) - 5 * dpr);
+    }
+  }
+}
+
+// склеивает огибающие нескольких записей в одну, с паузами между ними
 export function joinEnvelopes(envs: ArrayLike<number>[], n: number) {
-  const gap = [0, 0, 0, 0, 0, 0];
+  const gap = [0, 0, 0, 0];
   const all = envs.flatMap((e, i) => (i ? [...gap, ...Array.from(e)] : Array.from(e)));
   if (!all.length) return undefined;
   const out = new Float32Array(n);

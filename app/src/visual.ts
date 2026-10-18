@@ -1,149 +1,67 @@
-// Звукореактивная графика. Два режима в одном шейдере WebGL2:
-// живой — «капля» текущего звука и срезы-эхо истории справа;
-// портрет — огибающая всей записи, уникальная «обложка» поста.
-
-export type Palette = {
-  bgTop: string;
-  bgBot: string;
-  edge: string;
-  mid: string;
-  core: string;
-};
+// «Кольцо расхождения» (по мотивам Rehoboam): тишина — идеально ровный тонкий круг,
+// голос «распушает» линию там, где он звучит. Кольцо — время записи по часовой стрелке
+// от верха. Реакции и ответы — метки с выносками на том моменте, к которому они относятся.
+// Единственное оранжевое — «сейчас» и только что поставленная метка.
 
 export type Level = { level: number; tone: number };
 export type LevelSource = () => Level | null;
+export type Mark = { at: number; kind: "reply" | "reaction"; title: string; sub: string };
+// что написано внутри кольца: тег, автор, секунды пиксельными цифрами, подпись
+export type Readout = { top?: string; title?: string; digits?: string; label?: string; accent?: string };
 
-export const N = 40; // число срезов истории и портрета
-const PUSH_MS = 70; // как часто новый срез уходит в историю
+export const N = 40; // разрешение огибающей записи
+const TRACE = 120; // разрешение живого следа при записи
+const FIBERS = 1500;
 
-const VERT = `#version 300 es
-in vec2 aPos;
-void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+const INK = "17,17,17";
+const GREY = "150,150,148";
+export const ACCENT = "#FF5B1F";
+const MONO = '"JetBrains Mono", ui-monospace, monospace';
 
-const FRAG = `#version 300 es
-precision highp float;
-#define N ${N}
-uniform vec2 uRes;
-uniform float uTime;
-uniform float uShift;
-uniform float uMix;   // 0 — живой звук, 1 — портрет записи
-uniform float uProg;  // позиция воспроизведения в портрете
-uniform float uA[N];
-uniform float uT[N];
-uniform float uP[N];
-uniform vec3 uBgTop, uBgBot, uEdge, uMid, uCore;
-out vec4 o;
-
-float hash(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-
-// градиент от ядра к краю, как в тепловой карте
-vec3 heat(float d) {
-  vec3 col = mix(uCore, uMid, smoothstep(0.05, 0.62, d));
-  return mix(col, uEdge, smoothstep(0.55, 0.98, d));
-}
-
-vec3 paint(vec3 bg, float d, float fade, float u) {
-  vec3 col = heat(d) * mix(0.9, 1.0, smoothstep(0.0, 0.18, u)); // тень у края среза — «рёбра»
-  float body = 1.0 - smoothstep(0.86, 1.32, d);
-  float halo = exp(-d * d * 1.4) * 0.22;
-  vec3 c = mix(bg, col, body * fade);
-  return mix(c, uEdge, halo * fade * (1.0 - body));
-}
-
-// Живой режим: капля текущего звука и уходящие вправо срезы-эхо
-vec3 live(vec2 uv, vec3 bg) {
-  float asp = uRes.x / uRes.y;
-  vec2 p = vec2(uv.x * asp, uv.y);
-  float ox = 0.26 * asp;
-  float sw = 0.052 * asp;
-  float xs = (p.x - ox) / sw + uShift;
-  float k = p.x < ox ? 0.0 : floor(xs);
-  if (k >= float(N)) return bg;
-  int ki = int(k);
-
-  float R = (0.07 + uA[ki] * 0.3) * (1.0 + k * 0.012);
-  float start = k < 1.0 ? ox : ox + (k - uShift) * sw;
-  float cx = k < 1.0 ? ox : start - R * 0.32;
-  vec2 r = vec2(R * 0.95, R * (1.0 + uT[ki] * 0.35));
-  float d = length(vec2(p.x - cx, p.y - 0.5) / r);
-
-  float fade = k < 1.0 ? 1.0 : 0.92 * exp(-k * 0.05);
-  return paint(bg, d, fade, k < 1.0 ? 1.0 : fract(xs));
-}
-
-// Портрет: вся запись целиком, как временной ряд из вертикальных полос
-vec3 portrait(vec2 uv, vec3 bg) {
-  float m = 0.07;
-  float x = (uv.x - m) / (1.0 - 2.0 * m) * float(N);
-  if (x < 0.0 || x >= float(N)) return bg;
-  int i = int(floor(x));
-  float u = fract(x);
-  float a = mix(uP[i], uP[min(i + 1, N - 1)], smoothstep(0.75, 1.0, u));
-  float h = (0.02 + a * 0.26) * (1.0 + 0.035 * sin(uTime * 1.3 + float(i) * 0.45));
-  float d = abs(uv.y - 0.5) / h;
-  float played = uProg > 0.0 && float(i) / float(N) > uProg ? 0.45 : 1.0;
-  return paint(bg, d * 0.92, played, u);
-}
-
-void main() {
-  vec2 uv = gl_FragCoord.xy / uRes;
-  vec3 bg = mix(uBgBot, uBgTop, smoothstep(0.0, 1.0, uv.y));
-
-  vec3 c = uMix < 0.01 ? live(uv, bg)
-         : uMix > 0.99 ? portrait(uv, bg)
-         : mix(live(uv, bg), portrait(uv, bg), smoothstep(0.0, 1.0, uMix));
-
-  float g = hash(gl_FragCoord.xy + fract(uTime) * 100.0) - 0.5; // зерно
-  o = vec4(c + g * 0.045, 1.0);
-}`;
-
-function hex(h: string): [number, number, number] {
-  const v = parseInt(h.slice(1), 16);
-  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
-}
-
-const KEYS = ["bgTop", "bgBot", "edge", "mid", "core"] as const;
+// 5×7 пиксельный шрифт для цифр
+const GLYPHS: Record<string, string[]> = {
+  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+  "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+  "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
+  "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
+  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+  "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
+  ":": ["00000", "00100", "00100", "00000", "00100", "00100", "00000"],
+};
 
 export class Visual {
-  private gl: WebGL2RenderingContext;
-  private prog: WebGLProgram;
-  private loc: Record<string, WebGLUniformLocation | null> = {};
-  private amp = new Float32Array(N);
-  private tone = new Float32Array(N);
+  private ctx: CanvasRenderingContext2D;
+  private fa = new Float32Array(FIBERS); // угол 0..1
+  private fl = new Float32Array(FIBERS); // длина 0..1
+  private fs = new Float32Array(FIBERS); // наружу (1) или внутрь (-1)
+  private fw = new Float32Array(FIBERS); // «толщина» 0..1 → прозрачность
   private env = 0;
-  private envTone = 0;
-  private lastPush = 0;
-  private colors: Record<string, number[]> = {};
-  private target: Record<string, number[]> = {};
   private source: LevelSource | null = null;
   private portrait = new Float32Array(N);
   private hasPortrait = false;
-  private mix = 0;
+  private trace = new Float32Array(TRACE);
+  private tracing = false;
   private progress = 0;
+  private marks: Mark[] = [];
+  private flashes: { at: number; t0: number }[] = [];
+  private readout: Readout = {};
+  private reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  private w = 0;
+  private h = 0;
+  private dpr = 1;
 
-  constructor(private canvas: HTMLCanvasElement, palette: Palette) {
-    const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
-    if (!gl) throw new Error("WebGL2 недоступен");
-    this.gl = gl;
-    this.prog = this.link(VERT, FRAG);
-    gl.useProgram(this.prog);
-
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const aPos = gl.getAttribLocation(this.prog, "aPos");
-    gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-
-    for (const n of ["uRes", "uTime", "uShift", "uMix", "uProg", "uA", "uT", "uP", "uBgTop", "uBgBot", "uEdge", "uMid", "uCore"]) {
-      this.loc[n] = gl.getUniformLocation(this.prog, n);
+  constructor(private canvas: HTMLCanvasElement) {
+    this.ctx = canvas.getContext("2d")!;
+    for (let i = 0; i < FIBERS; i++) {
+      this.fa[i] = Math.random();
+      this.fl[i] = Math.pow(Math.random(), 1.6);
+      this.fs[i] = Math.random() < 0.72 ? 1 : -1;
+      this.fw[i] = Math.random();
     }
-
-    this.setPalette(palette, true);
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
     requestAnimationFrame(this.frame);
@@ -153,7 +71,6 @@ export class Visual {
     this.source = src;
   }
 
-  // огибающая записи из N значений 0..1; null — портрета нет
   setPortrait(env: ArrayLike<number> | null) {
     this.hasPortrait = !!env;
     this.portrait.fill(0);
@@ -161,99 +78,247 @@ export class Visual {
   }
 
   setProgress(p: number) {
-    this.progress = p;
+    this.progress = Math.max(0, Math.min(1, p));
   }
 
-  setPalette(p: Palette, instant = false) {
-    for (const k of KEYS) {
-      this.target[k] = hex(p[k]);
-      if (instant || !this.colors[k]) this.colors[k] = [...this.target[k]];
-    }
+  setMarks(m: Mark[]) {
+    this.marks = m;
+  }
+
+  // оранжевый импульс на моменте записи — отклик на только что поставленную реакцию
+  flash(at: number) {
+    this.flashes.push({ at, t0: performance.now() });
+  }
+
+  // запись: голос сам «рисует» след по кольцу по мере хода времени
+  setTracing(on: boolean) {
+    this.tracing = on;
+    if (on) this.trace.fill(0);
+  }
+
+  setReadout(r: Readout) {
+    this.readout = r;
+  }
+
+  // геометрия кольца в CSS-пикселях — для перемотки пальцем по кольцу
+  get ringRadiusCss() {
+    return (Math.min(this.w, this.h) * 0.255) / this.dpr;
+  }
+
+  get level() {
+    return this.env;
   }
 
   private resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.round(this.canvas.clientWidth * dpr);
-    const h = Math.round(this.canvas.clientHeight * dpr);
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.w = Math.round(this.canvas.clientWidth * this.dpr);
+    this.h = Math.round(this.canvas.clientHeight * this.dpr);
+    this.canvas.width = this.w;
+    this.canvas.height = this.h;
+  }
+
+  private envAt(a: number) {
+    if (this.tracing) return this.trace[Math.min(TRACE - 1, Math.floor(a * TRACE))];
+    if (!this.hasPortrait) return 0;
+    const x = a * (N - 1);
+    const i = Math.floor(x);
+    const f = x - i;
+    return this.portrait[i] * (1 - f) + this.portrait[Math.min(N - 1, i + 1)] * f;
   }
 
   private frame = (now: number) => {
-    const gl = this.gl;
-    const s = this.source?.() ?? null;
-
-    // в тишине капля «дышит», чтобы экран не был мёртвым
-    const idle = 0.06 + 0.025 * Math.sin(now / 900);
-    const target = s ? Math.max(s.level, 0.02) : idle;
-    this.env += (target - this.env) * (target > this.env ? 0.45 : 0.1);
-    this.envTone += ((s?.tone ?? 0.3) - this.envTone) * 0.1;
-
-    if (now - this.lastPush > PUSH_MS) {
-      this.amp.copyWithin(1, 0);
-      this.tone.copyWithin(1, 0);
-      this.lastPush = now;
-    }
-    this.amp[0] = this.env;
-    this.tone[0] = this.envTone;
-
-    const toMix = !s && this.hasPortrait ? 1 : 0;
-    this.mix += (toMix - this.mix) * 0.12;
-
-    for (const k of KEYS) {
-      const c = this.colors[k];
-      const t = this.target[k];
-      for (let i = 0; i < 3; i++) c[i] += (t[i] - c[i]) * 0.06;
-    }
-
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.uniform2f(this.loc.uRes, this.canvas.width, this.canvas.height);
-    gl.uniform1f(this.loc.uTime, now / 1000);
-    gl.uniform1f(this.loc.uShift, Math.min((now - this.lastPush) / PUSH_MS, 1));
-    gl.uniform1fv(this.loc.uA, this.amp);
-    gl.uniform1fv(this.loc.uT, this.tone);
-    gl.uniform1fv(this.loc.uP, this.portrait);
-    gl.uniform1f(this.loc.uMix, this.mix);
-    gl.uniform1f(this.loc.uProg, this.progress);
-    gl.uniform3fv(this.loc.uBgTop, this.colors.bgTop);
-    gl.uniform3fv(this.loc.uBgBot, this.colors.bgBot);
-    gl.uniform3fv(this.loc.uEdge, this.colors.edge);
-    gl.uniform3fv(this.loc.uMid, this.colors.mid);
-    gl.uniform3fv(this.loc.uCore, this.colors.core);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-
     requestAnimationFrame(this.frame);
+    if (!this.w || !this.h) return;
+    const ctx = this.ctx;
+    const t = this.reduced ? 0 : now / 1000;
+    const s = this.source?.() ?? null;
+    const target = s ? s.level : 0;
+    this.env += (target - this.env) * (target > this.env ? 0.45 : 0.1);
+    const lv = this.env;
+    const p = this.progress;
+
+    if (this.tracing) {
+      const i = Math.min(TRACE - 1, Math.floor(p * TRACE));
+      this.trace[i] = Math.max(this.trace[i], Math.min(1, lv * 1.3));
+    }
+
+    ctx.clearRect(0, 0, this.w, this.h);
+    const cx = this.w / 2;
+    const cy = this.h / 2;
+    const R = Math.min(this.w, this.h) * 0.255;
+    const TAU = Math.PI * 2;
+    const pos = (a: number, r: number) => [cx + Math.cos(a * TAU - Math.PI / 2) * r, cy + Math.sin(a * TAU - Math.PI / 2) * r];
+    const live = !!s || this.tracing;
+
+    // основа: пройденная часть — чернилами, остальное — тонко и серо
+    ctx.lineWidth = 1 * this.dpr;
+    ctx.strokeStyle = `rgba(${GREY},0.7)`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, -Math.PI / 2 + p * TAU, -Math.PI / 2 + TAU);
+    ctx.stroke();
+    if (p > 0) {
+      ctx.lineWidth = 1.5 * this.dpr;
+      ctx.strokeStyle = `rgb(${INK})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + p * TAU);
+      ctx.stroke();
+    }
+
+    // волокна: длина — громкость в этом месте записи, у «сейчас» — живая турбулентность
+    const ink = [new Path2D(), new Path2D(), new Path2D()];
+    const faint = new Path2D();
+    for (let i = 0; i < FIBERS; i++) {
+      const a = this.fa[i];
+      const played = a <= p;
+      const e = this.envAt(a);
+      const back = p - a;
+      const near = live && back >= 0 && back < 0.035 ? 1 - back / 0.035 : 0;
+      if (e < 0.03 && near === 0) continue;
+      if (!played && !this.hasPortrait) continue;
+      const sway = near * lv * Math.sin(t * 9 + this.fw[i] * 40) * R * 0.08;
+      const L = (e * e * 0.34 + near * lv * 0.22) * R * this.fl[i] + Math.abs(sway);
+      const side = this.fs[i];
+      const da = (this.fw[i] - 0.5) * 0.012 * (e + near);
+      const [x1, y1] = pos(a, R);
+      const [x2, y2] = pos(a + da, R + side * L);
+      const path = played ? ink[Math.min(2, Math.floor(this.fw[i] * 3))] : faint;
+      path.moveTo(x1, y1);
+      path.lineTo(x2, y2);
+    }
+    ctx.lineWidth = 0.7 * this.dpr;
+    ctx.strokeStyle = `rgba(${GREY},0.35)`;
+    ctx.stroke(faint);
+    [0.22, 0.42, 0.7].forEach((al, k) => {
+      ctx.strokeStyle = `rgba(${INK},${al})`;
+      ctx.stroke(ink[k]);
+    });
+
+    this.drawMarks(cx, cy, R, p, now, pos);
+
+    // «сейчас»
+    if (p > 0 || live) {
+      const [nx, ny] = pos(p, R);
+      ctx.fillStyle = ACCENT;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 4 * this.dpr, 0, TAU);
+      ctx.fill();
+    }
+
+    this.drawReadout(cx, cy, R);
   };
 
-  private link(vs: string, fs: string) {
-    const gl = this.gl;
-    const compile = (type: number, src: string) => {
-      const sh = gl.createShader(type)!;
-      gl.shaderSource(sh, src);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) ?? "shader");
-      return sh;
-    };
-    const p = gl.createProgram()!;
-    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
-    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
-    gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? "link");
-    return p;
+  private drawMarks(cx: number, _cy: number, R: number, p: number, now: number, pos: (a: number, r: number) => number[]) {
+    const ctx = this.ctx;
+    const d = this.dpr;
+    const fs = 9.5 * d;
+    ctx.font = `500 ${fs}px ${MONO}`;
+    ctx.textBaseline = "middle";
+    this.flashes = this.flashes.filter((f) => now - f.t0 < 1400);
+
+    for (const m of this.marks) {
+      const passed = m.at <= p + 0.002;
+      const hot = this.flashes.some((f) => Math.abs(f.at - m.at) < 0.03);
+      const col = hot ? ACCENT : passed ? `rgb(${INK})` : `rgba(${GREY},0.9)`;
+      const spread = this.envAt(m.at);
+      const [ax, ay] = pos(m.at, R + spread * spread * 0.34 * R + 6 * d);
+      const [bx, by] = pos(m.at, R * 1.3 + 8 * d);
+      const right = bx >= cx;
+      const ex = bx + (right ? 6 : -6) * d;
+
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.lineWidth = 0.8 * d;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.lineTo(ex, by);
+      ctx.stroke();
+      // ответ — квадрат, реакция — точка
+      if (m.kind === "reply") ctx.fillRect(ax - 2.5 * d, ay - 2.5 * d, 5 * d, 5 * d);
+      else {
+        ctx.beginPath();
+        ctx.arc(ax, ay, 2.2 * d, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const room = right ? this.w - ex - 4 * d : ex - 4 * d;
+      ctx.textAlign = right ? "left" : "right";
+      const tx = ex + (right ? 4 : -4) * d;
+      ctx.fillText(fit(ctx, m.title, room), tx, by - fs * 0.62);
+      ctx.fillStyle = hot ? ACCENT : `rgba(${GREY},1)`;
+      ctx.fillText(fit(ctx, m.sub, room), tx, by + fs * 0.62);
+    }
+    ctx.textAlign = "left";
+
+    for (const f of this.flashes) {
+      const k = (now - f.t0) / 1400;
+      const [fx, fy] = pos(f.at, R);
+      ctx.strokeStyle = ACCENT;
+      ctx.globalAlpha = 1 - k;
+      ctx.lineWidth = 1.5 * d;
+      ctx.beginPath();
+      ctx.arc(fx, fy, (4 + k * 22) * d, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  private drawReadout(cx: number, cy: number, R: number) {
+    const ctx = this.ctx;
+    const { top, title, digits, label, accent } = this.readout;
+    const d = this.dpr;
+    const room = R * 1.55;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    if (top) {
+      ctx.font = `500 ${9.5 * d}px ${MONO}`;
+      ctx.fillStyle = ACCENT;
+      ctx.fillText(fit(ctx, top, room), cx, cy - R * 0.5);
+    }
+    if (title) {
+      ctx.font = `600 ${15 * d}px "Inter Tight", "Helvetica Neue", Arial, sans-serif`;
+      ctx.fillStyle = `rgb(${INK})`;
+      ctx.fillText(fit(ctx, title, room), cx, cy - R * 0.27);
+    }
+    if (digits) {
+      const cell = Math.max(2, Math.round(R * (title ? 0.045 : 0.07)));
+      const gap = Math.max(1, Math.round(cell * 0.2));
+      const glyphW = 5 * cell;
+      const totalW = digits.length * glyphW + (digits.length - 1) * cell;
+      let x0 = Math.round(cx - totalW / 2);
+      const y0 = Math.round(title ? cy - R * 0.06 : cy - 3.5 * cell - (label ? cell : 0));
+      ctx.fillStyle = `rgb(${INK})`;
+      for (const ch of digits) {
+        const g = GLYPHS[ch];
+        if (g)
+          for (let r = 0; r < 7; r++)
+            for (let c = 0; c < 5; c++)
+              if (g[r][c] === "1") ctx.fillRect(x0 + c * cell, y0 + r * cell, cell - gap, cell - gap);
+        x0 += glyphW + cell;
+      }
+    }
+    if (label) {
+      ctx.font = `500 ${9.5 * d}px ${MONO}`;
+      const y = cy + R * (title ? 0.5 : 0.36);
+      const full = label + (accent ? " " + accent : "");
+      ctx.textAlign = "left";
+      let x = cx - ctx.measureText(full).width / 2;
+      ctx.fillStyle = `rgba(${GREY},1)`;
+      ctx.fillText(label, x, y);
+      if (accent) {
+        x += ctx.measureText(label + " ").width;
+        ctx.fillStyle = ACCENT;
+        ctx.fillText(accent, x, y);
+      }
+    }
+    ctx.textAlign = "left";
   }
 }
 
-export const PALETTES: Palette[] = [
-  // бумага: жёлтый → красный → синий
-  { bgTop: "#F4F2ED", bgBot: "#ECE9E2", edge: "#E9C84A", mid: "#EC4B3B", core: "#2D5BDB" },
-  // мята → фиолет
-  { bgTop: "#9ED2C3", bgBot: "#7A55D8", edge: "#F3A23A", mid: "#E3502B", core: "#283EA6" },
-  // красный с кислотным
-  { bgTop: "#3A0B10", bgBot: "#B5222C", edge: "#B9F24C", mid: "#63DB7C", core: "#2C77D2" },
-  // ночь: розовый → индиго
-  { bgTop: "#1D1424", bgBot: "#2B1631", edge: "#FF7C4F", mid: "#FF5EB3", core: "#6E5CFF" },
-  // слива: перламутр
-  { bgTop: "#1A1220", bgBot: "#24122A", edge: "#FF8A5C", mid: "#2EA59B", core: "#E9EFF0" },
-];
+function fit(ctx: CanvasRenderingContext2D, s: string, room: number) {
+  if (ctx.measureText(s).width <= room) return s;
+  let t = s;
+  while (t.length > 1 && ctx.measureText(t + "…").width > room) t = t.slice(0, -1);
+  return t + "…";
+}

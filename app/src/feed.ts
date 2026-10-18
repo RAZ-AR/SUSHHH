@@ -14,14 +14,18 @@ export type Post = {
   mine?: boolean; // запись текущего пользователя
   env?: ArrayLike<number>; // огибающая для «портрета»
   reactions: Record<string, number>;
+  moments: Moment[]; // реакции, привязанные к месту в записи
+  at?: number; // для ответа: момент исходной записи (0..1), на который он отвечает
   replies: Post[];
 };
+
+export type Moment = { at: number; emoji: string };
 
 const H = 3600_000;
 const M = 60_000;
 const now = Date.now();
 
-type Seed = Omit<Post, "replies" | "reactions" | "src" | "synthetic" | "author"> & {
+type Seed = Omit<Post, "replies" | "reactions" | "moments" | "src" | "synthetic" | "author"> & {
   author?: string; // нет автора — значит запись «моя» (демо раздела «Моё»)
   file: string;
   reactions?: Record<string, number>;
@@ -101,15 +105,44 @@ const SEED: Seed[] = [
   },
 ];
 
+// демо: на какой момент исходной записи отвечает каждый ответ
+const REPLY_AT: Record<string, number> = {
+  r1: 0.62, r2: 0.4, r3: 0.85, r4: 0.8, r5: 0.5, r6: 0.3, r7: 0.55, r8: 0.7, r9: 0.4, r10: 0.92,
+  r11: 0.5, r12: 0.78, r13: 0.88, r14: 0.2, r15: 0.32, r16: 0.95,
+};
+// демо: где в записи «горячая точка», вокруг неё кучкуются реакции
+const HOT: Record<string, number> = { s1: 0.7, s2: 0.42, s3: 0.82, s4: 0.35, s5: 0.6, s6: 0.75, s7: 0.45 };
+
+function seeded(n: number) {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function seedMoments(id: string, reactions: Record<string, number> | undefined): Moment[] {
+  const hot = HOT[id] ?? 0.5;
+  const out: Moment[] = [];
+  let k = id.length * 7;
+  for (const [emoji, n] of Object.entries(reactions ?? {})) {
+    for (let i = 0; i < n; i++, k++) {
+      const spread = (seeded(k) + seeded(k + 99) - 1) * 0.16; // ~ колокол вокруг горячей точки
+      const stray = seeded(k + 7) < 0.25 ? seeded(k + 3) - hot : 0; // часть реакций — в случайных местах
+      out.push({ emoji, at: Math.min(0.99, Math.max(0.01, hot + spread + stray)) });
+    }
+  }
+  return out;
+}
+
 function fromSeed(s: Seed): Post {
   const post: Post = {
     id: s.id, author: s.author ?? me(), mine: !s.author, createdAt: s.createdAt, hook: s.hook, text: s.text, tags: s.tags,
-    palette: s.palette, src: `/seed/${s.file}.m4a`, synthetic: true, reactions: { ...s.reactions }, replies: [],
+    palette: s.palette, src: `/seed/${s.file}.m4a`, synthetic: true, reactions: { ...s.reactions },
+    moments: seedMoments(s.id, s.reactions), replies: [],
   };
   post.replies = (s.replies ?? [])
     .map((r) => ({
       id: r.id, author: r.author ?? me(), mine: !r.author, createdAt: r.createdAt, text: r.text, hook: hookFrom(r.text, "Ответ"),
-      tags: [], palette: s.palette, src: `/seed/${r.file}.m4a`, synthetic: true, reactions: { ...r.reactions }, replies: [],
+      tags: [], palette: s.palette, src: `/seed/${r.file}.m4a`, synthetic: true, reactions: { ...r.reactions },
+      moments: seedMoments(r.id, r.reactions), at: REPLY_AT[r.id], replies: [],
     }))
     .sort((a, b) => a.createdAt - b.createdAt);
   return post;
@@ -123,6 +156,7 @@ export type Stored = {
   createdAt: number;
   palette: number;
   replyTo?: string;
+  at?: number; // момент исходной записи, на который отвечает
   text?: string;
   env?: number[];
 };
@@ -159,11 +193,11 @@ async function loadRecordings(): Promise<Stored[]> {
   }
 }
 
-// --- реакции: свои хранятся локально и прибавляются к общим ---
+// --- реакции: свои хранятся локально вместе с моментом записи ---
 
-const REACT_KEY = "sushhh.reactions";
+const REACT_KEY = "sushhh.reactions.v2";
 
-function myReactions(): Record<string, Record<string, number>> {
+function myReactions(): Record<string, [string, number][]> {
   try {
     return JSON.parse(localStorage.getItem(REACT_KEY) ?? "{}");
   } catch {
@@ -171,11 +205,11 @@ function myReactions(): Record<string, Record<string, number>> {
   }
 }
 
-export function addReaction(p: Post, emoji: string) {
+export function addReaction(p: Post, emoji: string, at: number) {
   p.reactions[emoji] = (p.reactions[emoji] ?? 0) + 1;
+  p.moments.push({ emoji, at });
   const all = myReactions();
-  all[p.id] ??= {};
-  all[p.id][emoji] = (all[p.id][emoji] ?? 0) + 1;
+  (all[p.id] ??= []).push([emoji, at]);
   try {
     localStorage.setItem(REACT_KEY, JSON.stringify(all));
   } catch {
@@ -229,6 +263,61 @@ export function removeLater(id: string) {
   writeIds("sushhh.later", later);
 }
 
+// --- безопасность: скрытые записи, заблокированные авторы, жалобы (локально) ---
+// В прототипе это хранится в браузере; в продукте жалоба уходит модераторам.
+
+const hidden = new Set(readIds("sushhh.hidden"));
+const blocked = new Set(readIds("sushhh.blocked"));
+
+export const isHidden = (id: string) => hidden.has(id);
+export const isBlocked = (author: string) => blocked.has(author);
+export const blockedAuthors = () => [...blocked];
+// запись видна, если её не скрыли и автор не в блоке
+export const visible = (p: Post) => !hidden.has(p.id) && !blocked.has(p.author);
+
+export function hidePost(id: string) {
+  hidden.add(id);
+  writeIds("sushhh.hidden", [...hidden]);
+}
+
+export function blockAuthor(author: string) {
+  blocked.add(author);
+  writeIds("sushhh.blocked", [...blocked]);
+}
+
+export function unblockAuthor(author: string) {
+  blocked.delete(author);
+  writeIds("sushhh.blocked", [...blocked]);
+}
+
+export type ReportReason = "abuse" | "spam" | "sexual" | "danger" | "personal" | "crisis" | "other";
+
+export function report(id: string, reason: ReportReason) {
+  try {
+    const list = JSON.parse(localStorage.getItem("sushhh.reports") ?? "[]");
+    list.push({ id, reason, at: Date.now() });
+    localStorage.setItem("sushhh.reports", JSON.stringify(list));
+  } catch {
+    // без хранилища жалоба теряется — в продукте она уходит на сервер
+  }
+  hidePost(id); // пожаловавшийся больше не слышит эту запись
+}
+
+export async function deleteRecording(id: string) {
+  hidePost(id); // демо-записи «моих» постов удалить нельзя — просто прячем
+  try {
+    const d = await db();
+    await new Promise<void>((resolve, reject) => {
+      const tx = d.transaction("posts", "readwrite");
+      tx.objectStore("posts").delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // записи не было в базе — уже спрятана
+  }
+}
+
 export function me() {
   const names = ["полночь", "без_сахара", "тёплый_шум", "северный", "на_балконе", "медленно"];
   try {
@@ -255,8 +344,8 @@ export function hookFrom(text: string | undefined, fallback: string) {
 export function storedToPost(s: Stored): Post {
   return {
     id: s.id, author: me(), mine: true, createdAt: s.createdAt, palette: s.palette, src: URL.createObjectURL(s.blob),
-    hook: hookFrom(s.text, s.replyTo ? "Твой ответ" : "Твоя запись"), text: s.text, env: s.env,
-    tags: s.replyTo ? [] : ["моё"], reactions: {}, replies: [],
+    hook: hookFrom(s.text, s.replyTo ? "Твой ответ" : "Твоя запись"), text: s.text, env: s.env, at: s.at,
+    tags: s.replyTo ? [] : ["моё"], reactions: {}, moments: [], replies: [],
   };
 }
 
@@ -277,9 +366,13 @@ export async function loadFeed(): Promise<Post[]> {
     else if (!s.replyTo) feed.unshift(post);
   }
 
-  for (const [id, r] of Object.entries(myReactions())) {
+  for (const [id, list] of Object.entries(myReactions())) {
     const p = byId.get(id);
-    if (p) for (const [e, n] of Object.entries(r)) p.reactions[e] = (p.reactions[e] ?? 0) + n;
+    if (!p || !Array.isArray(list)) continue;
+    for (const [emoji, at] of list) {
+      p.reactions[emoji] = (p.reactions[emoji] ?? 0) + 1;
+      p.moments.push({ emoji, at });
+    }
   }
   return feed;
 }

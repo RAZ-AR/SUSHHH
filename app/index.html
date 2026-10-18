@@ -3,136 +3,144 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0b0c" />
+    <meta name="theme-color" content="#EDEDEB" />
     <title>SUSHHH</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <!-- главный: сторис самых обсуждаемых + потоки -->
-    <section class="app view" id="home">
-      <header class="top">
-        <div class="mark">SUSHHH</div>
-        <div class="meta">Эфир · 21:00–23:00</div>
+    <!-- эфир: главный экран — радио. Кольцо играет поток, свайп вверх — следующий голос -->
+    <section class="app view radio" id="home">
+      <header class="radio-top">
+        <button class="mark small" id="markBtn" aria-label="SUSHHH"><i></i><i></i><i></i><i></i><i></i><i></i></button>
+        <nav class="channels" id="channels" aria-label="Потоки"></nav>
       </header>
 
-      <p class="section-title"><em>Обсуждают</em> сейчас</p>
-      <div class="stories" id="stories"></div>
+      <div class="stories" id="stories" aria-label="Обсуждают сейчас"></div>
 
-      <p class="section-title"><em>Потоки</em></p>
-      <div class="streams" id="streams"></div>
+      <div class="context" id="context" hidden>
+        <button class="context-back" id="back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg><span id="backLabel">Эфир</span></button>
+        <span class="eyebrow" id="queueTitle"></span>
+      </div>
+      <div class="segments" id="segments"></div>
 
-      <nav class="bottom">
-        <button class="tab on" data-go="home">Слушать</button>
-        <button class="rec" data-rec aria-label="Записать"><i></i></button>
-        <button class="tab" data-go="mine">Моё <b class="dot" data-badge hidden></b></button>
+      <div class="stage" id="stage" aria-label="Кольцо записи: тап — пауза, свайп вверх — дальше, двойной тап — сердце">
+        <canvas id="cv"></canvas>
+        <div class="floaters" id="floaters"></div>
+        <p class="sr-only" aria-live="polite" id="live"></p>
+      </div>
+
+      <div class="caption-block">
+        <p class="eyebrow meta-line">
+          <span id="now"></span> · <span id="ago"></span>
+          <span class="badge" id="synth" hidden>синтез</span>
+          <button class="speed" id="speed" aria-label="Скорость">1.25×</button>
+          <button class="more" id="moreBtn" aria-label="Ещё: пожаловаться, скрыть, заблокировать" aria-haspopup="dialog">⋯</button>
+        </p>
+        <h1 class="display hook" id="hook" role="button" tabindex="0" aria-label="Показать расшифровку"></h1>
+        <p class="caption ref" id="tags"></p>
+        <p class="transcript" id="transcript" hidden></p>
+      </div>
+
+      <div class="actions-bar">
+        <button class="act" id="heartBtn" aria-label="Сердце"><span class="act-ico">♡</span><small id="heartCount"></small></button>
+        <button class="act" id="fanBtn" aria-label="Другие реакции"><span class="act-ico">☺</span><small id="reactCount"></small></button>
+        <button class="act" id="thread" aria-label="Ветка целиком"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg><small id="threadCount"></small></button>
+        <button class="act" id="laterBtn" aria-label="Ответить позже"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" /></svg></button>
+        <button class="act primary" id="reply"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3" /></svg><span>Ответить</span></button>
+        <div class="fan" id="fan" hidden></div>
+      </div>
+
+      <nav class="tabbar">
+        <button class="tab on" data-go="home"><span>Эфир</span></button>
+        <button class="tab icon" data-rec aria-label="Записать"><b class="rec-dot"></b></button>
+        <button class="tab icon" data-go="mine" aria-label="Моё">
+          <svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z" /></svg>
+          <b class="dot" data-badge hidden></b>
+        </button>
       </nav>
     </section>
 
-    <!-- моё: ответы мне, очередь «ответить позже», мои записи и ветки -->
+    <!-- моё -->
     <section class="app view" id="mine" hidden>
-      <header class="top">
-        <div class="mark">SUSHHH</div>
-        <div class="meta" id="meName"></div>
+      <header class="dash">
+        <div class="dash-main">
+          <button class="mark" data-go="home" aria-label="SUSHHH"><i></i><i></i><i></i><i></i><i></i><i></i></button>
+          <p class="eyebrow" id="meName"></p>
+          <h1 class="display">Моё</h1>
+        </div>
+        <div class="tile"><canvas data-dial></canvas></div>
       </header>
+      <p class="eyebrow air" data-air></p>
 
       <div class="mine-body">
         <div class="mine-head">
-          <p class="section-title"><em>Тебе ответили</em> <span id="newCount"></span></p>
-          <button class="link" id="playNew" hidden>слушать новые</button>
+          <p class="eyebrow section">Тебе ответили <span class="accent" id="newCount"></span></p>
+          <button class="link" id="playNew" hidden>Слушать новые</button>
         </div>
         <div class="rows" id="toMe"></div>
 
-        <p class="section-title"><em>Ответить позже</em></p>
+        <p class="eyebrow section">Ответить позже</p>
         <div class="rows" id="later"></div>
 
-        <p class="section-title"><em>Мои записи</em></p>
+        <p class="eyebrow section">Мои записи</p>
         <div class="rows" id="myPosts"></div>
 
-        <p class="section-title"><em>Ветки с твоими ответами</em></p>
+        <p class="eyebrow section">Ветки с твоими ответами</p>
         <div class="rows" id="myThreads"></div>
+
+        <p class="eyebrow section">Заблокированные</p>
+        <div class="rows" id="blocked"></div>
       </div>
 
-      <nav class="bottom">
-        <button class="tab" data-go="home">Слушать</button>
-        <button class="rec" data-rec aria-label="Записать"><i></i></button>
-        <button class="tab on" data-go="mine">Моё <b class="dot" data-badge hidden></b></button>
+      <nav class="tabbar">
+        <button class="tab icon" data-go="home" aria-label="Эфир">
+          <svg viewBox="0 0 24 24"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2" /></svg>
+        </button>
+        <button class="tab icon" data-rec aria-label="Записать"><b class="rec-dot"></b></button>
+        <button class="tab on" data-go="mine"><span>Моё</span><b class="dot" data-badge hidden></b></button>
       </nav>
-    </section>
-
-    <!-- плеер: очередь записей одна за другой -->
-    <section class="app view" id="player" hidden>
-      <header class="top">
-        <button class="back" id="back" aria-label="Назад">
-          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
-        </button>
-        <div class="meta" id="queueTitle"></div>
-      </header>
-
-      <div class="segments" id="segments"></div>
-
-      <div class="stage" id="stage">
-        <canvas id="cv"></canvas>
-        <div class="hint" id="hint">Нажми, чтобы слушать</div>
-        <div class="floaters" id="floaters"></div>
-      </div>
-
-      <section class="info">
-        <p class="legend">
-          <em id="now">Сейчас:</em> <span id="author"></span> · <span id="ago"></span>
-          <span class="badge" id="synth" hidden>синтез</span>
-        </p>
-        <h1 id="hook"></h1>
-        <p class="transcript" id="transcript" hidden></p>
-        <p class="tags" id="tags"></p>
-      </section>
-
-      <div class="reactions" id="reactions"></div>
-
-      <div class="controls">
-        <button class="ghost" id="prev" aria-label="Предыдущая">
-          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
-        </button>
-        <button class="play" id="play" aria-label="Играть">
-          <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-          <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3v14H7zM14 5h3v14h-3z" /></svg>
-        </button>
-        <button class="ghost" id="next" aria-label="Следующая">
-          <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
-        </button>
-      </div>
-
-      <div class="actions">
-        <button id="speed">1.25×</button>
-        <button id="tr">текст</button>
-        <button id="thread">ветка · 0</button>
-        <button id="laterBtn">позже</button>
-        <button id="reply" class="strong">ответить</button>
-      </div>
     </section>
 
     <!-- запись: пост до 30 с, ответ до 15 с -->
     <div class="recorder" id="recorder" hidden>
-      <header class="top">
-        <div class="mark">SUSHHH</div>
-        <button class="close" id="close" aria-label="Закрыть">×</button>
-      </header>
-      <p class="legend rec-title" id="recTitle"><em>Новая запись</em></p>
-      <div class="stage rec-stage"><canvas id="cv2"></canvas></div>
-      <p class="timer" id="timer">0:00 <span>/ 0:30</span></p>
-      <p class="rec-note" id="recNote"></p>
-      <p class="rec-text" id="recText"></p>
-      <div class="rec-controls" id="recIdle">
-        <button class="rec big" id="recBtn" aria-label="Запись">
-          <svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" id="ring" /></svg>
-          <i></i>
+      <header class="pbar">
+        <span class="eyebrow" id="recTitle"></span>
+        <button class="sq" id="close" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
+      </header>
+      <h1 class="display hook" id="recHead"></h1>
+      <div class="stage rec-stage"><canvas id="cv2"></canvas></div>
+      <p class="rec-text" id="recText"></p>
+      <p class="caption" id="recNote"></p>
+      <div class="rec-controls" id="recIdle">
+        <button class="rec-btn" id="recBtn" aria-label="Запись"><i></i></button>
       </div>
       <div class="rec-controls" id="recDone" hidden>
-        <button class="pill" id="again">заново</button>
-        <button class="pill" id="listenBack">прослушать</button>
-        <button class="pill solid" id="publish">опубликовать</button>
+        <button class="pill" id="again">Заново</button>
+        <button class="pill" id="listenBack">Прослушать</button>
+        <button class="pill solid" id="publish">Опубликовать</button>
+      </div>
+      <p class="caption muted" id="recRules"></p>
+    </div>
+
+    <!-- лист действий «⋯»: жалоба, скрыть, блок; для своих записей — удалить -->
+    <div class="sheet-backdrop" id="sheet" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+        <p class="eyebrow" id="sheetTitle"></p>
+        <p class="sheet-sub" id="sheetSub"></p>
+        <div class="sheet-body" id="sheetBody"></div>
+        <button class="sheet-row cancel" id="sheetCancel">Отмена</button>
       </div>
     </div>
+
+    <div class="toast" id="toast" role="status" hidden></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
