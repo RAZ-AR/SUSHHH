@@ -1,7 +1,8 @@
 // «Кольцо расхождения» (по мотивам Rehoboam): тишина — идеально ровный тонкий круг,
 // голос «распушает» линию там, где он звучит. Кольцо — время записи по часовой стрелке
 // от верха. Реакции и ответы — пузырьки на том моменте, к которому они относятся.
-// Никакого цвета, кроме эмодзи: «сейчас» — тёмная точка.
+// Неоморфизм «единорог»: прослушанное переливается пастелью по кругу,
+// «сейчас» — светящаяся мятная точка.
 
 export type Level = { level: number; tone: number };
 export type LevelSource = () => Level | null;
@@ -11,42 +12,37 @@ export type Mark = { at: number; kind: "reply" | "reaction"; text: string };
 export type Readout = { title?: string; sub?: string; big?: boolean };
 
 export const N = 40; // разрешение огибающей записи
-const TRACE = 120; // разрешение живого следа при записи
-const FIBERS = 1500;
 
-const INK = "31,31,31";
-const GREY = "170,170,165";
-const SANS = '"Inter", -apple-system, "Helvetica Neue", Arial, sans-serif';
+const INK = "79,93,117";
+const GREY = "163,177,198";
+const MINT = "#6bf2c8";
+const BG = "#e8edf4";
+const SANS = '"Nunito", -apple-system, "Helvetica Neue", Arial, sans-serif';
+// перелив по кругу: голубой → сирень → розовый → мята → лимон → снова голубой
+const UNI = ["#7fd8ea", "#a48cf2", "#ee8fcd", "#7fe0b0", "#e8d77a", "#7fd8ea"];
+
+function uniGradient(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
+  const g = ctx.createConicGradient(-Math.PI / 2, cx, cy);
+  UNI.forEach((c, i) => g.addColorStop(i / (UNI.length - 1), c));
+  return g;
+}
 
 export class Visual {
   private ctx: CanvasRenderingContext2D;
-  private fa = new Float32Array(FIBERS); // угол 0..1
-  private fl = new Float32Array(FIBERS); // длина 0..1
-  private fs = new Float32Array(FIBERS); // наружу (1) или внутрь (-1)
-  private fw = new Float32Array(FIBERS); // «толщина» 0..1 → прозрачность
   private env = 0;
+  private toneLv = 0.3;
   private source: LevelSource | null = null;
-  private portrait = new Float32Array(N);
-  private hasPortrait = false;
-  private trace = new Float32Array(TRACE);
   private tracing = false;
   private progress = 0;
   private marks: Mark[] = [];
   private flashes: { at: number; t0: number }[] = [];
   private readout: Readout = {};
-  private reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   private w = 0;
   private h = 0;
   private dpr = 1;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
-    for (let i = 0; i < FIBERS; i++) {
-      this.fa[i] = Math.random();
-      this.fl[i] = Math.pow(Math.random(), 1.6);
-      this.fs[i] = Math.random() < 0.72 ? 1 : -1;
-      this.fw[i] = Math.random();
-    }
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
     requestAnimationFrame(this.frame);
@@ -54,12 +50,6 @@ export class Visual {
 
   setSource(src: LevelSource | null) {
     this.source = src;
-  }
-
-  setPortrait(env: ArrayLike<number> | null) {
-    this.hasPortrait = !!env;
-    this.portrait.fill(0);
-    if (env) this.portrait.set(Array.from(env).slice(0, N));
   }
 
   setProgress(p: number) {
@@ -78,7 +68,6 @@ export class Visual {
   // запись: голос сам «рисует» след по кольцу по мере хода времени
   setTracing(on: boolean) {
     this.tracing = on;
-    if (on) this.trace.fill(0);
   }
 
   setReadout(r: Readout) {
@@ -94,6 +83,11 @@ export class Visual {
     return this.env;
   }
 
+  // тембр 0..1 — сдвигает оттенки свечения
+  get tone() {
+    return this.toneLv;
+  }
+
   private resize() {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.w = Math.round(this.canvas.clientWidth * this.dpr);
@@ -102,30 +96,16 @@ export class Visual {
     this.canvas.height = this.h;
   }
 
-  private envAt(a: number) {
-    if (this.tracing) return this.trace[Math.min(TRACE - 1, Math.floor(a * TRACE))];
-    if (!this.hasPortrait) return 0;
-    const x = a * (N - 1);
-    const i = Math.floor(x);
-    const f = x - i;
-    return this.portrait[i] * (1 - f) + this.portrait[Math.min(N - 1, i + 1)] * f;
-  }
-
   private frame = (now: number) => {
     requestAnimationFrame(this.frame);
     if (!this.w || !this.h) return;
     const ctx = this.ctx;
-    const t = this.reduced ? 0 : now / 1000;
     const s = this.source?.() ?? null;
     const target = s ? s.level : 0;
     this.env += (target - this.env) * (target > this.env ? 0.45 : 0.1);
-    const lv = this.env;
+    this.toneLv += ((s?.tone ?? 0.3) - this.toneLv) * 0.08;
     const p = this.progress;
 
-    if (this.tracing) {
-      const i = Math.min(TRACE - 1, Math.floor(p * TRACE));
-      this.trace[i] = Math.max(this.trace[i], Math.min(1, lv * 1.3));
-    }
 
     ctx.clearRect(0, 0, this.w, this.h);
     const cx = this.w / 2;
@@ -135,58 +115,39 @@ export class Visual {
     const pos = (a: number, r: number) => [cx + Math.cos(a * TAU - Math.PI / 2) * r, cy + Math.sin(a * TAU - Math.PI / 2) * r];
     const live = !!s || this.tracing;
 
-    // основа: пройденная часть — чернилами, остальное — тонко и серо
+    // на диске нет волн: голос живёт в цветном свечении за диском (CSS, --lv и --tone).
+    // Здесь — только тонкая дорожка времени: пройденное переливом, остальное едва видно
+    const uni = uniGradient(ctx, cx, cy);
     ctx.lineWidth = 1 * this.dpr;
-    ctx.strokeStyle = `rgba(${GREY},0.7)`;
+    ctx.strokeStyle = `rgba(${GREY},0.35)`;
     ctx.beginPath();
     ctx.arc(cx, cy, R, -Math.PI / 2 + p * TAU, -Math.PI / 2 + TAU);
     ctx.stroke();
     if (p > 0) {
-      ctx.lineWidth = 1.5 * this.dpr;
-      ctx.strokeStyle = `rgb(${INK})`;
+      ctx.lineWidth = 2.5 * this.dpr;
+      ctx.strokeStyle = uni;
       ctx.beginPath();
       ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + p * TAU);
       ctx.stroke();
     }
 
-    // волокна: длина — громкость в этом месте записи, у «сейчас» — живая турбулентность
-    const ink = [new Path2D(), new Path2D(), new Path2D()];
-    const faint = new Path2D();
-    for (let i = 0; i < FIBERS; i++) {
-      const a = this.fa[i];
-      const played = a <= p;
-      const e = this.envAt(a);
-      const back = p - a;
-      const near = live && back >= 0 && back < 0.035 ? 1 - back / 0.035 : 0;
-      if (e < 0.03 && near === 0) continue;
-      if (!played && !this.hasPortrait) continue;
-      const sway = near * lv * Math.sin(t * 9 + this.fw[i] * 40) * R * 0.08;
-      const L = (e * e * 0.34 + near * lv * 0.22) * R * this.fl[i] + Math.abs(sway);
-      const side = this.fs[i];
-      const da = (this.fw[i] - 0.5) * 0.012 * (e + near);
-      const [x1, y1] = pos(a, R);
-      const [x2, y2] = pos(a + da, R + side * L);
-      const path = played ? ink[Math.min(2, Math.floor(this.fw[i] * 3))] : faint;
-      path.moveTo(x1, y1);
-      path.lineTo(x2, y2);
-    }
-    ctx.lineWidth = 0.7 * this.dpr;
-    ctx.strokeStyle = `rgba(${GREY},0.35)`;
-    ctx.stroke(faint);
-    [0.22, 0.42, 0.7].forEach((al, k) => {
-      ctx.strokeStyle = `rgba(${INK},${al})`;
-      ctx.stroke(ink[k]);
-    });
-
     this.drawMarks(cx, cy, R, p, now, pos);
 
-    // «сейчас»
+    // «сейчас» — светящаяся мятная точка, как индикатор «вкл» в Soft GUI
     if (p > 0 || live) {
       const [nx, ny] = pos(p, R);
-      ctx.fillStyle = `rgb(${INK})`;
+      ctx.save();
+      ctx.shadowColor = MINT;
+      ctx.shadowBlur = 12 * this.dpr;
+      ctx.fillStyle = "#f6fffb";
       ctx.beginPath();
-      ctx.arc(nx, ny, 4.5 * this.dpr, 0, TAU);
+      ctx.arc(nx, ny, 5.5 * this.dpr, 0, TAU);
       ctx.fill();
+      ctx.fillStyle = MINT;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 3 * this.dpr, 0, TAU);
+      ctx.fill();
+      ctx.restore();
     }
 
     this.drawReadout(cx, cy, R);
@@ -197,25 +158,43 @@ export class Visual {
     const d = this.dpr;
     const fs = 12 * d;
     const h = 24 * d;
-    ctx.font = `500 ${fs}px ${SANS}`;
+    ctx.font = `700 ${fs}px ${SANS}`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
     this.flashes = this.flashes.filter((f) => now - f.t0 < 1400);
 
     for (const m of this.marks) {
       const passed = m.at <= p + 0.002;
-      const spread = this.envAt(m.at);
-      const [x, y] = pos(m.at, R + spread * spread * 0.34 * R + 22 * d);
+      const [x, y] = pos(m.at, R + 24 * d);
       const w = Math.max(h, ctx.measureText(m.text).width + 16 * d);
       // пузырёк не вылезает за края холста
       const bx = Math.min(Math.max(x, w / 2 + 2 * d), this.w - w / 2 - 2 * d);
       const by = Math.min(Math.max(y, h / 2 + 2 * d), this.h - h / 2 - 2 * d);
       const reply = m.kind === "reply";
-      ctx.globalAlpha = passed ? 1 : 0.55;
-      ctx.fillStyle = reply ? `rgb(${INK})` : "#ffffff";
-      ctx.beginPath();
-      ctx.roundRect(bx - w / 2, by - h / 2, w, h, h / 2);
-      ctx.fill();
+      ctx.globalAlpha = passed ? 1 : 0.6;
+      // выпуклая таблетка: тёмная тень снизу-справа и светлая сверху-слева
+      ctx.save();
+      for (const [ox, oy, col] of [[2.5, 2.5, `rgba(${GREY},0.7)`], [-2, -2, "rgba(255,255,255,0.9)"]] as const) {
+        ctx.shadowColor = col;
+        ctx.shadowBlur = 5 * d;
+        ctx.shadowOffsetX = ox * d;
+        ctx.shadowOffsetY = oy * d;
+        ctx.fillStyle = BG;
+        ctx.beginPath();
+        ctx.roundRect(bx - w / 2, by - h / 2, w, h, h / 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      if (reply) {
+        const g = ctx.createLinearGradient(bx - w / 2, by - h / 2, bx + w / 2, by + h / 2);
+        g.addColorStop(0, UNI[0]);
+        g.addColorStop(0.5, UNI[1]);
+        g.addColorStop(1, UNI[2]);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.roundRect(bx - w / 2, by - h / 2, w, h, h / 2);
+        ctx.fill();
+      }
       ctx.fillStyle = reply ? "#ffffff" : `rgb(${INK})`;
       ctx.fillText(m.text, bx, by + 0.5 * d);
       // точка на самом кольце
@@ -231,7 +210,7 @@ export class Visual {
     for (const f of this.flashes) {
       const k = (now - f.t0) / 1400;
       const [fx, fy] = pos(f.at, R);
-      ctx.strokeStyle = `rgb(${INK})`;
+      ctx.strokeStyle = MINT;
       ctx.globalAlpha = 1 - k;
       ctx.lineWidth = 1.5 * d;
       ctx.beginPath();
@@ -249,13 +228,13 @@ export class Visual {
     ctx.textBaseline = "middle";
     const ts = (big ? 40 : 18) * d;
     if (title) {
-      ctx.font = `${big ? 500 : 600} ${ts}px ${SANS}`;
+      ctx.font = `${big ? 700 : 800} ${ts}px ${SANS}`;
       ctx.fillStyle = `rgb(${INK})`;
       ctx.fillText(fit(ctx, title, _R * 1.5), cx, sub ? cy - ts * 0.35 : cy);
     }
     if (sub) {
-      ctx.font = `500 ${13 * d}px ${SANS}`;
-      ctx.fillStyle = `rgba(${GREY},1)`;
+      ctx.font = `700 ${13 * d}px ${SANS}`;
+      ctx.fillStyle = "#97b6ca";
       ctx.fillText(fit(ctx, sub, _R * 1.5), cx, cy + (title ? ts * 0.6 : 0));
     }
     ctx.textAlign = "left";

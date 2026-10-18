@@ -190,7 +190,7 @@ function renderStories() {
     b.onclick = () => openStory(i);
     st.append(b);
     const cv = b.querySelector("canvas")!;
-    const draw = () => drawRing(cv, p.env, true);
+    const draw = () => drawRing(cv, p.env, !seen.has(p.id));
     draw();
     void ensureEnv(p).then(draw);
   });
@@ -282,12 +282,12 @@ function show() {
   $("heartBtn").classList.remove("liked");
   $("heartBtn").querySelector(".ico")!.outerHTML = icon("heart");
   renderReactionCounts();
-  visual.setPortrait(p.env ?? null);
   visual.setMarks(marksFor(p, !parent));
   void ensureEnv(p).then(() => {
-    if (cur()?.post === p) visual.setPortrait(p.env ?? null);
   });
-  $("segments").innerHTML = mode.kind === "radio" ? "" : items.map((_, i) => `<span class="seg${i < qi ? " done" : ""}"><i></i></span>`).join("");
+  // «гусеница»: пройденные шарики переливаются, текущий светится
+  $("segments").innerHTML =
+    mode.kind === "radio" ? "" : items.map((_, i) => `<span class="seg${i < qi ? " done" : i === qi ? " now" : ""}"><i></i></span>`).join("");
   $("fan").hidden = true;
 }
 
@@ -334,6 +334,7 @@ player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && 
   const bar = $("segments").children[qi]?.firstElementChild as HTMLElement | undefined;
   if (bar) bar.style.width = `${prog * 100}%`;
   visual.setProgress(el.ended ? 0 : prog);
+  glow($("stage"), visual);
 
   // внутри кольца только автор и время
   const { post: p, parent } = cur();
@@ -343,6 +344,22 @@ player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && 
   else if (!el.paused) visual.setReadout({ title, sub: clock(Math.ceil(left)) });
   else visual.setReadout({ title, sub: "пауза" });
 })();
+
+// цвет за диском: размер — по кольцу, пульс — по громкости, вращение быстрее, когда говорят,
+// в тишине — медленное дыхание. При «уменьшении движения» цвет не вращается.
+const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const spin = new WeakMap<HTMLElement, number>();
+
+function glow(stage: HTMLElement, v: Visual) {
+  const breath = 0.04 + 0.035 * Math.sin(performance.now() / 1300);
+  const lv = Math.max(v.level, calm ? 0 : breath);
+  const rot = (spin.get(stage) ?? 0) + (calm ? 0 : 0.1 + v.level * 2.8);
+  spin.set(stage, rot % 1800); // 1800 — общий период обоих слоёв, без скачка
+  stage.style.setProperty("--r", `${v.ringRadiusCss}px`);
+  stage.style.setProperty("--lv", lv.toFixed(3));
+  stage.style.setProperty("--rot", `${rot.toFixed(1)}deg`);
+  stage.style.setProperty("--tone", v.tone.toFixed(3));
+}
 
 // =================== метки на кольце ===================
 
@@ -907,16 +924,22 @@ function soundTiles(): HTMLElement[] {
       );
   }
 
+  // неоморфный переключатель: вкл — звуки из моих записей появляются без вопроса
   const on = allowsWithoutAsking();
-  const toggle = document.createElement("button");
-  toggle.className = "sheet-row" + (on ? " on" : "");
-  toggle.style.gridColumn = "1 / -1";
-  toggle.innerHTML = `${icon(on ? "check" : "wave")}<span>${on ? "Звуки из моих записей — без вопроса" : "Спрашивать меня про каждый звук"}</span>`;
-  toggle.onclick = () => {
+  const row = document.createElement("div");
+  row.className = "switch-row";
+  row.innerHTML = `<span>Разрешать звуки без вопроса</span>`;
+  const sw = document.createElement("button");
+  sw.className = "switch" + (on ? " on" : "");
+  sw.setAttribute("role", "switch");
+  sw.setAttribute("aria-checked", String(on));
+  sw.setAttribute("aria-label", "Разрешать звуки из моих записей без вопроса");
+  sw.onclick = () => {
     setAllowWithoutAsking(!on);
     renderMine();
   };
-  out.push(toggle);
+  row.append(sw);
+  out.push(row);
 
   if (!reqs.length && !live.length) out.unshift(emptyState("wave", "Когда кто-то захочет сделать звук из твоей записи, ты решишь здесь"));
   return out;
@@ -977,7 +1000,6 @@ function reset() {
   preview.el.pause();
   take = null;
   recVisual.setTracing(false);
-  recVisual.setPortrait(null);
   recVisual.setMarks([]);
   recVisual.setProgress(0);
   setRecState("idle");
@@ -1044,7 +1066,6 @@ async function stopRec() {
   let env: number[] = [];
   try {
     env = Array.from(await envelope(blob, N));
-    recVisual.setPortrait(env);
   } catch {
     // формат не декодируется — формы не будет, запись всё равно сохраним
   }
@@ -1078,6 +1099,7 @@ $("listenBack").onclick = () => {
 preview.el.addEventListener("play", () => setIcon($("listenBack"), "pause"));
 preview.el.addEventListener("pause", () => setIcon($("listenBack"), "play"));
 (function previewProgress() {
+  if (!$("recorder").hidden) glow($("recStage"), recVisual);
   const d = preview.el.duration;
   if (take && d && isFinite(d)) recVisual.setProgress(preview.el.ended ? 0 : preview.el.currentTime / d);
   requestAnimationFrame(previewProgress);

@@ -12,37 +12,55 @@ function setup(canvas: HTMLCanvasElement) {
   return { ctx, w, h, dpr };
 }
 
-// мини «кольцо расхождения»: тонкий круг, распушённый там, где в записи голос
-export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, dark = false) {
+// мини-превью записи: белый диск, а за ним цветные пятна там, где в записи громче —
+// у каждой записи свой «цветовой отпечаток». color = false — приглушённо (просмотрено)
+const UNI = ["#8fe6f2", "#b9a7f7", "#f5a8dc", "#a8efc8", "#f2e7a1"];
+
+export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, color = false) {
   const s = setup(canvas);
   if (!s) return;
-  const { ctx, w, h, dpr } = s;
+  const { ctx, w, h } = s;
   const cx = w / 2;
   const cy = h / 2;
-  const R = Math.min(w, h) * 0.3;
-  const col = dark ? "31,31,31" : "170,170,165";
-  ctx.strokeStyle = `rgba(${col},0.9)`;
-  ctx.lineWidth = 1 * dpr;
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, Math.PI * 2);
-  ctx.stroke();
-  if (!env?.length) return;
-  ctx.lineWidth = 0.6 * dpr;
-  const n = 260;
-  for (let i = 0; i < n; i++) {
-    const t = i / n;
-    const e = env[Math.min(env.length - 1, Math.floor(t * env.length))];
-    if (e < 0.05) continue;
-    // детерминированный «шум», чтобы превью не мерцали при перерисовке
-    const r1 = Math.sin(i * 12.9898) * 43758.5453;
-    const k = r1 - Math.floor(r1);
-    const side = k < 0.72 ? 1 : -1;
-    const L = e * e * R * 0.55 * Math.pow(k, 1.4);
-    const a = t * Math.PI * 2 - Math.PI / 2;
-    ctx.strokeStyle = `rgba(${col},${0.25 + 0.5 * k})`;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
-    ctx.lineTo(cx + Math.cos(a) * (R + side * L), cy + Math.sin(a) * (R + side * L));
-    ctx.stroke();
+  const R = Math.min(w, h) / 2;
+
+  // энергия по пяти секторам записи
+  const n = UNI.length;
+  const energy = new Array(n).fill(0.35);
+  if (env?.length) {
+    for (let k = 0; k < n; k++) {
+      let sum = 0;
+      const from = Math.floor((k * env.length) / n);
+      const to = Math.floor(((k + 1) * env.length) / n);
+      for (let j = from; j < to; j++) sum += env[j];
+      energy[k] = sum / Math.max(1, to - from);
+    }
   }
+
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(a) * R * 0.42;
+    const y = cy + Math.sin(a) * R * 0.42;
+    const r = R * (0.45 + energy[k] * 0.55);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const alpha = color ? 0.35 + energy[k] * 0.6 : 0.18;
+    g.addColorStop(0, hexA(color ? UNI[k] : "#a3b1c6", alpha));
+    g.addColorStop(1, hexA(color ? UNI[k] : "#a3b1c6", 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  // белый выпуклый диск в центре
+  const d = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  d.addColorStop(0, "#f8fbff");
+  d.addColorStop(1, "#e3e8f0");
+  ctx.fillStyle = d;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 0.56, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function hexA(hex: string, a: number) {
+  const v = parseInt(hex.slice(1), 16);
+  return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a})`;
 }
