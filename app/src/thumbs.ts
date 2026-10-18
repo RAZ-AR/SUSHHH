@@ -14,49 +14,70 @@ function setup(canvas: HTMLCanvasElement) {
 
 import { hsl, type Aura } from "./aura";
 
-// мини-превью записи: белый диск, за ним пятна ауры автора — ярче там, где в записи громче.
-// a = null — приглушённо серым (просмотрено)
-export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, a: Aura | null) {
+// мини-персонаж: светлая жемчужная капля, сквозь неё — аура автора.
+// a = null — просмотрено: аура бледная, глаза закрыты
+export function drawRing(canvas: HTMLCanvasElement, _env: ArrayLike<number> | undefined, a: Aura | null) {
   const s = setup(canvas);
   if (!s) return;
-  const { ctx, w, h } = s;
+  const { ctx, w, h, dpr } = s;
   const cx = w / 2;
   const cy = h / 2;
-  const R = Math.min(w, h) / 2;
+  const R = Math.min(w, h) * 0.38;
+  const [h1, h2, h3] = a ?? [230, 250, 210];
+  const vivid = a ? 1 : 0.35;
 
-  // энергия по пяти секторам записи
-  const n = 5;
-  const hues = a ? [a[0], a[1], a[2], a[0], a[1]] : [];
-  const energy = new Array(n).fill(0.35);
-  if (env?.length) {
-    for (let k = 0; k < n; k++) {
-      let sum = 0;
-      const from = Math.floor((k * env.length) / n);
-      const to = Math.floor(((k + 1) * env.length) / n);
-      for (let j = from; j < to; j++) sum += env[j];
-      energy[k] = sum / Math.max(1, to - from);
-    }
-  }
-
-  for (let k = 0; k < n; k++) {
-    const a = (k / n) * Math.PI * 2 - Math.PI / 2;
-    const x = cx + Math.cos(a) * R * 0.42;
-    const y = cy + Math.sin(a) * R * 0.42;
-    const r = R * (0.45 + energy[k] * 0.55);
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const alpha = a ? 0.4 + energy[k] * 0.55 : 0.18;
-    g.addColorStop(0, a ? hsl(hues[k], alpha, 74) : `rgba(163,177,198,${alpha})`);
-    g.addColorStop(1, a ? hsl(hues[k], 0, 74) : "rgba(163,177,198,0)");
+  // аура вокруг и чуть ниже капли: три цветных пятна
+  for (const [hue, dx, dy] of [[h1, -0.35, -0.1], [h2, 0.4, 0.25], [h3, 0, 0.5]] as const) {
+    const x = cx + dx * R;
+    const y = cy + dy * R;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, R * 1.25);
+    g.addColorStop(0, hsl(hue, 0.75 * vivid, 70));
+    g.addColorStop(1, hsl(hue, 0, 70));
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
   }
 
-  // белый выпуклый диск в центре
-  const d = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-  d.addColorStop(0, "#f8fbff");
-  d.addColorStop(1, "#e3e8f0");
-  ctx.fillStyle = d;
+  // тело: светлое жемчужное стекло, снизу — отсвет ауры
+  const body = ctx.createRadialGradient(cx, cy - R * 0.1, R * 0.1, cx, cy, R);
+  body.addColorStop(0, "rgba(255,255,255,0.9)");
+  body.addColorStop(0.7, "rgba(248,244,253,0.75)");
+  body.addColorStop(1, "rgba(255,255,255,0.95)");
+  ctx.fillStyle = body;
   ctx.beginPath();
-  ctx.arc(cx, cy, R * 0.56, 0, Math.PI * 2);
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
   ctx.fill();
+  const tint = ctx.createRadialGradient(cx + R * 0.3, cy + R * 0.5, 0, cx + R * 0.3, cy + R * 0.5, R * 0.8);
+  tint.addColorStop(0, hsl(h2, 0.55 * vivid, 72));
+  tint.addColorStop(1, hsl(h2, 0, 72));
+  ctx.fillStyle = tint;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fill();
+
+  // жемчужная кромка
+  const rim = ctx.createConicGradient(0, cx, cy);
+  ["#ffb3d1", "#c9a8ff", "#9fd3ff", "#8ff0d8", "#fff0a8", "#ffc4a3", "#ffb3d1"].forEach((col, i, all) => rim.addColorStop(i / (all.length - 1), col));
+  ctx.strokeStyle = rim;
+  ctx.globalAlpha = a ? 0.9 : 0.4;
+  ctx.lineWidth = 2 * dpr;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R - dpr, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // блики
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.beginPath();
+  ctx.ellipse(cx - R * 0.32, cy - R * 0.5, R * 0.22, R * 0.11, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // глаза: глубокие, в тон ауры; закрытые — чёрточки
+  ctx.fillStyle = a ? `oklch(0.34 0.08 ${h1})` : "oklch(0.55 0.02 250)";
+  const ew = R * 0.14;
+  const eh = a ? R * 0.36 : R * 0.07;
+  for (const dx of [-R * 0.21, R * 0.21]) {
+    ctx.beginPath();
+    ctx.roundRect(cx + dx - ew / 2, cy - eh / 2 - R * 0.02, ew, eh, ew / 2);
+    ctx.fill();
+  }
 }

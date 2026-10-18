@@ -591,7 +591,8 @@ body::after { width: 75vmax; height: 75vmax; right: -30vmax; bottom: -25vmax; ba
 @property --a1 { syntax: "<color>"; inherits: true; initial-value: #a9c4ff; }
 @property --a2 { syntax: "<color>"; inherits: true; initial-value: #c9b6ff; }
 @property --a3 { syntax: "<color>"; inherits: true; initial-value: #b6efe0; }
-#home, .stage { transition: --a1 0.9s ease, --a2 0.9s ease, --a3 0.9s ease; }
+@property --h { syntax: "<number>"; inherits: true; initial-value: 190; }
+#home, .stage { transition: --a1 0.9s ease, --a2 0.9s ease, --a3 0.9s ease, --h 0.9s ease; }
 
 /* стекло — только для управления (как требует Liquid Glass в iOS 26–27):
    диск, сторис, превью и строки внутри листов — плотный материал, не стекло */
@@ -698,3 +699,260 @@ body::after { width: 75vmax; height: 75vmax; right: -30vmax; bottom: -25vmax; ba
 
 /* кнопка «слушать» — в центре чистого диска */
 .start { top: 50%; margin-top: -32px; }
+
+/* =====================================================================
+   Liquid Glass Kit: тёплый песок, солнечный свет из окна, толстое прозрачное
+   стекло с яркой кромкой, цветные стеклянные кнопки с цветной тенью-каустикой.
+   Голос — персонаж: стеклянная сфера с глазами в ауре автора.
+   ===================================================================== */
+:root {
+  --ink: #1f1d2b;
+  --icon: #6b6878;
+  --mute: #9a96a5;
+  --label: #8f8aa0;
+  --violet: #6e5bf0;
+  --sand: #ebe3db;
+  /* стекло кита: прозрачнее, кромка ярче; солнце сверху-слева — тени падают вправо-вниз */
+  --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.14));
+  --glass-strong: linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.78));
+  --glass-edge: inset 0 1.5px 1px rgba(255, 255, 255, 0.95), inset 0 -2px 3px rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  --glass-lift: 10px 16px 22px -12px rgba(78, 66, 58, 0.38), 0 1px 2px rgba(78, 66, 58, 0.08);
+}
+
+/* песок и свет из окна: светлая полоса по диагонали и мягкая тень рамы справа */
+html { background: var(--sand); }
+body::before {
+  width: 140vmax;
+  height: 60vmax;
+  left: -40vmax;
+  top: -10vmax;
+  border-radius: 40%;
+  background: linear-gradient(115deg, rgba(255, 252, 246, 0.95), rgba(255, 248, 238, 0));
+  filter: blur(50px);
+  opacity: 0.9;
+  transform: rotate(-18deg);
+  animation: sun 40s ease-in-out infinite alternate;
+}
+body::after {
+  width: 90vmax;
+  height: 120vmax;
+  right: -45vmax;
+  bottom: auto;
+  top: -20vmax;
+  border-radius: 30%;
+  background: linear-gradient(200deg, rgba(92, 104, 128, 0.32), rgba(92, 104, 128, 0));
+  filter: blur(60px);
+  opacity: 1;
+  transform: rotate(-18deg);
+  animation: sun 52s ease-in-out infinite alternate-reverse;
+}
+@keyframes sun { to { translate: 3vmax 2vmax; } }
+
+/* белые плотные таблетки — основные кнопки; выбранное — фиолетовое стекло */
+.pill { background: rgba(255, 255, 255, 0.92); color: var(--icon); box-shadow: inset 0 1px 0 #fff, var(--glass-lift); }
+.pill.on, .pill:active {
+  background: linear-gradient(160deg, rgba(150, 132, 255, 0.92), rgba(110, 91, 240, 0.88));
+  color: #fff;
+  box-shadow: var(--glass-edge), 10px 16px 22px -10px rgba(110, 91, 240, 0.55);
+}
+.pill.on .ico { stroke: #fff; }
+.pill.on small { color: #fff; }
+.pill.quiet, .big-play.quiet { background: var(--glass); color: var(--icon); box-shadow: var(--glass-edge), var(--glass-lift); }
+/* главное действие — цветное стекло с цветной тенью, как Secondary в ките */
+.pill.dark {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--me1, #8f7dff) 85%, #fff), color-mix(in srgb, var(--me2, #6e5bf0) 92%, #000 4%));
+  box-shadow: var(--glass-edge), 10px 16px 22px -8px color-mix(in srgb, var(--me1, #8f7dff) 60%, transparent);
+}
+
+/* таббар — толстое стекло; выбранная вкладка — белая таблетка с фиолетовой чертой */
+.tabbar { background: var(--glass); box-shadow: var(--glass-edge), 12px 22px 30px -16px rgba(78, 66, 58, 0.45); }
+.tab.on { background: #fff; color: var(--ink); box-shadow: inset 0 1px 0 #fff, 6px 10px 16px -8px rgba(78, 66, 58, 0.35); }
+.tab.on .ico { stroke: var(--ink); }
+.tab.on::after { width: 18px; height: 3px; border-radius: 2px; bottom: 6px; background: var(--violet); box-shadow: none; }
+.badge { background: var(--violet); box-shadow: 0 2px 6px rgba(110, 91, 240, 0.5); }
+
+/* лист, тост, веер — прозрачное стекло с толстой кромкой */
+.sheet { background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.55)); }
+.sheet-row { background: rgba(255, 255, 255, 0.85); box-shadow: inset 0 1px 0 #fff, 6px 10px 16px -10px rgba(78, 66, 58, 0.3); }
+.sheet-row.on, .sheet-row:active { background: linear-gradient(160deg, rgba(150, 132, 255, 0.9), rgba(110, 91, 240, 0.88)); color: #fff; }
+.sheet-row.on .ico { color: #fff; }
+.toast { background: rgba(255, 255, 255, 0.9); }
+.seg.done, .seg.now { background: var(--violet); }
+.seg.now { box-shadow: var(--glass-edge), 0 0 12px 2px rgba(110, 91, 240, 0.55); }
+.hair::before { background: rgba(78, 66, 58, 0.18); }
+.switch.on { background: linear-gradient(90deg, rgba(150, 132, 255, 0.85), rgba(110, 91, 240, 0.85)); }
+
+/* --------------------------------------------------------------------
+   Персонаж-голос: стеклянная сфера, внутри — глубокий цвет ауры, по краю —
+   радужная кромка; глаза моргают, смотрят по сторонам, реагируют на реакции.
+   --r радиус, --lv громкость, --rot вращение кромки, --lx/--ly взгляд
+   -------------------------------------------------------------------- */
+.disc { display: none; }
+.orb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--r) * 1.7);
+  height: calc(var(--r) * 1.7);
+  translate: -50% -50%;
+  scale: calc(1 + var(--lv) * 0.05);
+  border-radius: 50%;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.35), transparent 20%),
+    radial-gradient(circle at 50% 40%, oklch(0.6 0.12 var(--h)), oklch(0.3 0.09 calc(var(--h) + 30)) 74%);
+  box-shadow: inset 0 -14px 30px rgba(0, 0, 0, 0.35), inset 0 10px 24px rgba(255, 255, 255, 0.18),
+    14px 26px 40px -14px rgba(60, 46, 70, 0.55);
+  transition: scale 0.15s ease-out;
+}
+/* радужная кромка: кольцо из конического градиента, вырезанное маской, плюс свечение */
+.orb-rim, .orb-rim::after {
+  position: absolute;
+  inset: -4%;
+  border-radius: 50%;
+  background: conic-gradient(from var(--rot), #ff9a4d, #ff5c7a, #b974ff, #5aa8ff, #2fd6c6, #ffd166, #ff9a4d);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
+}
+.orb-rim { filter: blur(0.6px) saturate(1.2); opacity: calc(0.85 + var(--lv) * 0.15); }
+.orb-rim::after { content: ""; inset: -6%; filter: blur(14px); opacity: calc(0.45 + var(--lv) * 0.55); -webkit-mask: none; mask: none; z-index: -1; }
+/* блик стекла сверху */
+.orb::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  top: 9%;
+  width: 46%;
+  height: 22%;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0));
+  filter: blur(2px);
+}
+
+/* глаза: белые капсулы со свечением; моргают сами по себе */
+.eyes {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  display: flex;
+  gap: calc(var(--r) * 0.26);
+  translate: calc(-50% + var(--lx, 0px)) calc(-50% + var(--ly, 0px));
+  transition: translate 0.6s var(--spring);
+}
+.eyes i {
+  display: block;
+  width: calc(var(--r) * 0.13);
+  height: calc(var(--r) * 0.34);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.85);
+  scale: 1 calc(1 + var(--lv) * 0.18);
+  transition: height 0.25s var(--spring), width 0.25s var(--spring), border-radius 0.25s, rotate 0.25s, scale 0.12s;
+  animation: blink 5.2s infinite;
+}
+.eyes i + i { animation-delay: 0.04s; }
+@keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.12); } }
+
+/* спит: пауза или ещё не включали — глаза-чёрточки, сфера едва дышит */
+.orb.sleep .eyes i { height: calc(var(--r) * 0.05); animation: none; }
+.orb.sleep { animation: doze 3.6s ease-in-out infinite; }
+@keyframes doze { 50% { scale: 1.02; } }
+/* эмоции на реакции */
+.orb.happy .eyes i { height: calc(var(--r) * 0.16); width: calc(var(--r) * 0.28); background: transparent; border-top: 7px solid #fff; border-radius: 50% 50% 0 0; box-shadow: none; animation: none; }
+.orb.laugh .eyes i { height: calc(var(--r) * 0.11); width: calc(var(--r) * 0.26); animation: none; }
+.orb.laugh .eyes i:first-child { rotate: 22deg; }
+.orb.laugh .eyes i:last-child { rotate: -22deg; }
+.orb.wow .eyes i { width: calc(var(--r) * 0.26); height: calc(var(--r) * 0.26); animation: none; }
+.orb.sad .eyes i { height: calc(var(--r) * 0.2); animation: none; }
+.orb.sad .eyes i:first-child { rotate: -18deg; }
+.orb.sad .eyes i:last-child { rotate: 18deg; }
+.orb.meh .eyes i { height: calc(var(--r) * 0.09); animation: none; }
+/* при записи слушает тебя: смотрит вверх */
+.orb.listen .eyes { translate: -50% calc(-50% - var(--r) * 0.08); }
+
+/* каустика: свет проходит сквозь стекло и ложится цветом под сферой, вправо-вниз */
+.stage::before { translate: 10% 16%; width: calc(var(--r) * 2.6); height: calc(var(--r) * 2.2); filter: blur(30px) saturate(1.4); }
+.stage::after { mix-blend-mode: normal; opacity: calc(0.15 + var(--lv) * 0.5); }
+
+/* кнопка «слушать» — у нижнего края сферы, не закрывает глаза */
+.start { top: calc(50% + var(--r) * 0.62); background: linear-gradient(160deg, rgba(150, 132, 255, 0.95), rgba(110, 91, 240, 0.92)); box-shadow: var(--glass-edge), 8px 14px 20px -8px rgba(110, 91, 240, 0.6); }
+
+.who { color: var(--ink); }
+.hook { color: var(--icon); }
+.story canvas, .tile canvas { background: transparent; box-shadow: none; }
+.tile canvas { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .eyes i, .orb.sleep { animation: none; }
+}
+
+/* смена голоса для персонажа: новый всплывает снизу (transform свободен — translate/scale заняты) */
+.stage.swap-next .orb { animation: orb-in-up 0.6s var(--spring); }
+.stage.swap-prev .orb { animation: orb-in-down 0.6s var(--spring); }
+@keyframes orb-in-up { from { opacity: 0; transform: translateY(40px) scale(0.9); } }
+@keyframes orb-in-down { from { opacity: 0; transform: translateY(-40px) scale(0.9); } }
+
+/* =====================================================================
+   Персонаж — светлая капля жидкого стекла: прозрачная, жемчужная,
+   сквозь неё преломляется яркая переливающаяся аура. Глаза — глубокие, в тон ауры.
+   ===================================================================== */
+.orb {
+  width: calc(var(--r) * 1.75);
+  height: calc(var(--r) * 1.75);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0) 26%),
+    radial-gradient(circle at 68% 82%, color-mix(in oklab, var(--a2) 60%, transparent), transparent 52%),
+    radial-gradient(circle at 24% 70%, color-mix(in oklab, var(--a3) 45%, transparent), transparent 46%),
+    conic-gradient(from var(--rot), rgba(255, 214, 236, 0.4), rgba(196, 226, 255, 0.4), rgba(214, 255, 238, 0.4),
+      rgba(255, 240, 206, 0.4), rgba(232, 214, 255, 0.4), rgba(255, 214, 236, 0.4)),
+    radial-gradient(circle at 50% 44%, rgba(255, 255, 255, 0.6), rgba(246, 242, 252, 0.4) 68%, rgba(255, 255, 255, 0.75));
+  -webkit-backdrop-filter: blur(5px) saturate(1.8);
+  backdrop-filter: blur(5px) saturate(1.8);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.85),
+    inset 0 -20px 32px color-mix(in oklab, var(--a1) 55%, transparent),
+    inset 0 14px 22px rgba(255, 255, 255, 0.75),
+    14px 26px 40px -16px rgba(78, 66, 58, 0.32);
+}
+/* второй, маленький блик — как у настоящей капли */
+.orb::after {
+  left: 62%;
+  top: 66%;
+  width: 14%;
+  height: 8%;
+  background: rgba(255, 255, 255, 0.85);
+  filter: blur(1.5px);
+  rotate: -30deg;
+}
+/* кромка: тонкая жемчужная радуга, светится ярче */
+.orb-rim, .orb-rim::after {
+  inset: -2%;
+  background: conic-gradient(from var(--rot), #ffb3d1, #c9a8ff, #9fd3ff, #8ff0d8, #fff0a8, #ffc4a3, #ffb3d1);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+}
+.orb-rim { opacity: calc(0.75 + var(--lv) * 0.25); filter: saturate(1.4); }
+.orb-rim::after { inset: -10%; filter: blur(18px) saturate(1.6); opacity: calc(0.55 + var(--lv) * 0.45); -webkit-mask: none; mask: none; }
+
+/* глаза: глубокие, в тон ауры, с бликом — читаются на светлом стекле */
+.eyes i {
+  background: linear-gradient(180deg, oklch(0.42 0.09 var(--h)), oklch(0.26 0.07 var(--h)));
+  box-shadow: inset 0 2px 1px rgba(255, 255, 255, 0.45), 0 2px 6px oklch(0.4 0.08 var(--h) / 0.35);
+}
+.orb.happy .eyes i { border-top-color: oklch(0.32 0.08 var(--h)); }
+
+/* аура ярче и переливается: насыщенность выше, оттенки плывут вместе с вращением */
+.stage::before {
+  translate: 4% 8%;
+  width: calc(var(--r) * 3);
+  height: calc(var(--r) * 2.7);
+  filter: blur(26px) saturate(2) hue-rotate(calc(var(--rot) * 0.6));
+  opacity: calc(0.85 + var(--lv) * 0.15);
+}
+.stage::after {
+  mix-blend-mode: normal;
+  filter: blur(20px) saturate(1.8) hue-rotate(calc(var(--rot) * -0.8));
+  opacity: calc(0.35 + var(--lv) * 0.6);
+}

@@ -37,7 +37,7 @@
       </div>
 
       <div class="stage" id="stage" aria-label="Кольцо записи: тап — пауза, свайп вверх — дальше, двойной тап — сердце">
-        <div class="disc"></div>
+        <div class="orb" id="orb" aria-hidden="true"><div class="orb-rim"></div><div class="eyes"><i></i><i></i></div></div>
         <canvas id="cv"></canvas>
         <button class="start" id="startBtn" aria-label="Слушать эфир"><i data-i="play"></i></button>
         <div class="floaters" id="floaters"></div>
@@ -90,7 +90,7 @@
         <span class="pill" id="recWhat"></span>
         <button class="pill icon-only" id="close" aria-label="Закрыть"><i data-i="x"></i></button>
       </header>
-      <div class="stage" id="recStage"><div class="disc"></div><canvas id="cv2"></canvas></div>
+      <div class="stage" id="recStage"><div class="orb listen" id="recOrb" aria-hidden="true"><div class="orb-rim"></div><div class="eyes"><i></i><i></i></div></div><canvas id="cv2"></canvas></div>
       <p class="who big" id="recTime">0:00</p>
       <div class="hair"><i id="recHairFill"></i></div>
       <p class="rec-text" id="recText"></p>

@@ -25,6 +25,7 @@ export function paintAura(el: HTMLElement, a: Aura) {
   el.style.setProperty("--a1", hsl(a[0]));
   el.style.setProperty("--a2", hsl(a[1], 1, 80));
   el.style.setProperty("--a3", hsl(a[2], 1, 82));
+  el.style.setProperty("--h", String(a[0])); // сам оттенок — для насыщенного тела персонажа
 }
 
 export const auraGradient = (a: Aura) => `linear-gradient(135deg, ${hsl(a[0], 1, 72)}, ${hsl(a[1], 1, 76)}, ${hsl(a[2], 1, 78)})`;

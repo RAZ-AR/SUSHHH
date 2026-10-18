@@ -361,6 +361,8 @@ player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && 
   $("hairFill").style.width = `${(el.ended ? 0 : prog) * 100}%`;
   $("hair").setAttribute("aria-valuenow", String(Math.round(prog * 100)));
   $("startBtn").hidden = started;
+  // персонаж «говорит», пока звучит голос; на паузе и до старта — спит
+  $("orb").classList.toggle("sleep", !started || el.paused);
 })();
 
 // цвет за диском: размер — по кольцу, пульс — по громкости, вращение быстрее, когда говорят,
@@ -434,6 +436,7 @@ function react(r: Reaction, big = false) {
   toastMeme(r);
   renderReactionCounts();
   float(r, big);
+  emote(MOOD[r] ?? "happy");
   if (r === "❤️") {
     $("heartBtn").classList.add("liked");
     $("heartBtn").querySelector(".ico")!.outerHTML = icon("heartFill");
@@ -451,11 +454,39 @@ async function reactSound(snd: CommunitySound) {
   visual.setMarks(marksFor(p, !cur().parent));
   visual.flash(at);
   float(snd.icon);
+  emote("laugh");
   toast(`«${snd.name}»`);
   player.el.volume = 0.3;
   const ms = await playClip(src, snd.start, snd.dur, player.fx(MAX_DUR * 1000 + 400));
   setTimeout(() => (player.el.volume = 1), ms + 100);
 }
+
+// персонаж отвечает на реакцию выражением глаз
+const MOOD: Record<string, string> = {
+  "❤️": "happy", "🤗": "happy", "👏": "happy", "🎉": "happy",
+  "😂": "laugh", "🥁": "laugh",
+  "😮": "wow", "🔥": "wow", "😱": "wow", "📯": "wow",
+  "🎺": "sad", "🦗": "meh",
+};
+let moodTimer = 0;
+function emote(mood: string) {
+  const orb = $("orb");
+  orb.classList.remove("happy", "laugh", "wow", "sad", "meh");
+  void orb.offsetWidth;
+  orb.classList.add(mood);
+  clearTimeout(moodTimer);
+  moodTimer = window.setTimeout(() => orb.classList.remove(mood), 1400);
+}
+
+// персонаж поглядывает по сторонам, пока говорит; в тишине смотрит прямо
+setInterval(() => {
+  const talking = !player.el.paused && !calm;
+  const r = visual.ringRadiusCss;
+  const lx = talking ? (Math.random() - 0.5) * r * 0.22 : 0;
+  const ly = talking ? (Math.random() - 0.5) * r * 0.12 : 0;
+  $("orb").style.setProperty("--lx", `${lx.toFixed(1)}px`);
+  $("orb").style.setProperty("--ly", `${ly.toFixed(1)}px`);
+}, 2200);
 
 function float(r: string, big = false) {
   const s = document.createElement("span");
@@ -1150,7 +1181,11 @@ $("listenBack").onclick = () => {
 preview.el.addEventListener("play", () => setIcon($("listenBack"), "pause"));
 preview.el.addEventListener("pause", () => setIcon($("listenBack"), "play"));
 (function previewProgress() {
-  if (!$("recorder").hidden) glow($("recStage"), recVisual);
+  if (!$("recorder").hidden) {
+    glow($("recStage"), recVisual);
+    // слушает, пока ты говоришь или пока звучит дубль; иначе дремлет
+    $("recOrb").classList.toggle("sleep", !recorder.active && preview.el.paused);
+  }
   const d = preview.el.duration;
   if (take && d && isFinite(d) && !preview.el.paused) $("recHairFill").style.width = `${(preview.el.currentTime / d) * 100}%`;
   requestAnimationFrame(previewProgress);
