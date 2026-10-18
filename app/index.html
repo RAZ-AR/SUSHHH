@@ -3,31 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#EDEDEB" />
+    <meta name="theme-color" content="#EFEFED" />
     <title>SUSHHH</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <!-- эфир: главный экран — радио. Кольцо играет поток, свайп вверх — следующий голос -->
-    <section class="app view radio" id="home">
-      <header class="radio-top">
-        <button class="mark small" id="markBtn" aria-label="SUSHHH"><i></i><i></i><i></i><i></i><i></i><i></i></button>
-        <nav class="channels" id="channels" aria-label="Потоки"></nav>
+    <!-- эфир: радио. Кольцо играет поток; внутри — автор и время -->
+    <section class="app view" id="home">
+      <header class="top">
+        <button class="pill chan" id="chanBtn" aria-haspopup="dialog"><span id="chanName">Для тебя</span><i data-i="down"></i></button>
+        <button class="pill icon-only" id="moreBtn" aria-label="Ещё" aria-haspopup="dialog"><i data-i="dots"></i></button>
       </header>
 
       <div class="stories" id="stories" aria-label="Обсуждают сейчас"></div>
 
       <div class="context" id="context" hidden>
-        <button class="context-back" id="back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg><span id="backLabel">Эфир</span></button>
-        <span class="eyebrow" id="queueTitle"></span>
+        <button class="pill icon-only" id="back" aria-label="Назад в эфир"><i data-i="left"></i></button>
+        <div class="segments" id="segments"></div>
       </div>
-      <div class="segments" id="segments"></div>
 
       <div class="stage" id="stage" aria-label="Кольцо записи: тап — пауза, свайп вверх — дальше, двойной тап — сердце">
         <canvas id="cv"></canvas>
@@ -35,108 +31,72 @@
         <p class="sr-only" aria-live="polite" id="live"></p>
       </div>
 
-      <div class="caption-block">
-        <p class="eyebrow meta-line">
-          <span id="now"></span> · <span id="ago"></span>
-          <span class="badge" id="synth" hidden>синтез</span>
-          <button class="speed" id="speed" aria-label="Скорость">1.25×</button>
-          <button class="more" id="moreBtn" aria-label="Ещё: пожаловаться, скрыть, заблокировать" aria-haspopup="dialog">⋯</button>
-        </p>
-        <h1 class="display hook" id="hook" role="button" tabindex="0" aria-label="Показать расшифровку"></h1>
-        <p class="caption ref" id="tags"></p>
-        <p class="transcript" id="transcript" hidden></p>
-      </div>
+      <p class="hook" id="hook" role="button" tabindex="0" aria-label="Показать расшифровку"></p>
+      <p class="transcript" id="transcript" hidden></p>
 
-      <div class="actions-bar">
-        <button class="act" id="heartBtn" aria-label="Сердце"><span class="act-ico">♡</span><small id="heartCount"></small></button>
-        <button class="act" id="fanBtn" aria-label="Другие реакции"><span class="act-ico">☺</span><small id="reactCount"></small></button>
-        <button class="act" id="thread" aria-label="Ветка целиком"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg><small id="threadCount"></small></button>
-        <button class="act" id="laterBtn" aria-label="Ответить позже"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" /></svg></button>
-        <button class="act primary" id="reply"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3" /></svg><span>Ответить</span></button>
+      <div class="actions">
+        <button class="pill" id="heartBtn" aria-label="Сердце"><i data-i="heart"></i><small id="heartCount"></small></button>
+        <button class="pill icon-only" id="fanBtn" aria-label="Реакции"><i data-i="smile"></i></button>
+        <button class="pill" id="thread" aria-label="Ветка целиком"><i data-i="message"></i><small id="threadCount"></small></button>
+        <button class="pill icon-only" id="laterBtn" aria-label="Ответить позже"><i data-i="clock"></i></button>
+        <span class="grow"></span>
+        <button class="pill dark icon-only" id="reply" aria-label="Ответить голосом"><i data-i="mic"></i></button>
         <div class="fan" id="fan" hidden></div>
       </div>
 
-      <nav class="tabbar">
-        <button class="tab on" data-go="home"><span>Эфир</span></button>
-        <button class="tab icon" data-rec aria-label="Записать"><b class="rec-dot"></b></button>
-        <button class="tab icon" data-go="mine" aria-label="Моё">
-          <svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z" /></svg>
-          <b class="dot" data-badge hidden></b>
-        </button>
+      <nav class="tabbar" aria-label="Разделы">
+        <button class="tab on" data-go="home" aria-label="Эфир" aria-current="page"><i data-i="headphones"></i></button>
+        <button class="tab" data-rec aria-label="Записать"><i data-i="mic"></i></button>
+        <button class="tab" data-go="mine" aria-label="Моё"><i data-i="inbox"></i><b class="badge" data-badge hidden></b></button>
       </nav>
     </section>
 
-    <!-- моё -->
+    <!-- моё: тоже для слушания — новые ответы одной кнопкой, остальное кольцами -->
     <section class="app view" id="mine" hidden>
-      <header class="dash">
-        <div class="dash-main">
-          <button class="mark" data-go="home" aria-label="SUSHHH"><i></i><i></i><i></i><i></i><i></i><i></i></button>
-          <p class="eyebrow" id="meName"></p>
-          <h1 class="display">Моё</h1>
-        </div>
-        <div class="tile"><canvas data-dial></canvas></div>
-      </header>
-      <p class="eyebrow air" data-air></p>
-
-      <div class="mine-body">
-        <div class="mine-head">
-          <p class="eyebrow section">Тебе ответили <span class="accent" id="newCount"></span></p>
-          <button class="link" id="playNew" hidden>Слушать новые</button>
-        </div>
-        <div class="rows" id="toMe"></div>
-
-        <p class="eyebrow section">Ответить позже</p>
-        <div class="rows" id="later"></div>
-
-        <p class="eyebrow section">Мои записи</p>
-        <div class="rows" id="myPosts"></div>
-
-        <p class="eyebrow section">Ветки с твоими ответами</p>
-        <div class="rows" id="myThreads"></div>
-
-        <p class="eyebrow section">Заблокированные</p>
-        <div class="rows" id="blocked"></div>
+      <button class="pill dark big-play" id="playNew"><i data-i="play"></i><span id="playNewText"></span></button>
+      <div class="seg-tabs" role="tablist">
+        <button class="pill icon-only on" data-tab="toMe" role="tab" aria-label="Ответы мне"><i data-i="message"></i></button>
+        <button class="pill icon-only" data-tab="later" role="tab" aria-label="Ответить позже"><i data-i="clock"></i></button>
+        <button class="pill icon-only" data-tab="posts" role="tab" aria-label="Мои записи и ветки"><i data-i="mic"></i></button>
+        <button class="pill icon-only" data-tab="sounds" role="tab" aria-label="Звуки из моих записей"><i data-i="wave"></i></button>
+        <button class="pill icon-only" data-tab="blocked" role="tab" aria-label="Заблокированные"><i data-i="ban"></i></button>
       </div>
+      <div class="grid" id="grid"></div>
 
-      <nav class="tabbar">
-        <button class="tab icon" data-go="home" aria-label="Эфир">
-          <svg viewBox="0 0 24 24"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2" /></svg>
-        </button>
-        <button class="tab icon" data-rec aria-label="Записать"><b class="rec-dot"></b></button>
-        <button class="tab on" data-go="mine"><span>Моё</span><b class="dot" data-badge hidden></b></button>
+      <nav class="tabbar" aria-label="Разделы">
+        <button class="tab" data-go="home" aria-label="Эфир"><i data-i="headphones"></i></button>
+        <button class="tab" data-rec aria-label="Записать"><i data-i="mic"></i></button>
+        <button class="tab on" data-go="mine" aria-label="Моё" aria-current="page"><i data-i="inbox"></i><b class="badge" data-badge hidden></b></button>
       </nav>
     </section>
 
     <!-- запись: пост до 30 с, ответ до 15 с -->
     <div class="recorder" id="recorder" hidden>
-      <header class="pbar">
-        <span class="eyebrow" id="recTitle"></span>
-        <button class="sq" id="close" aria-label="Закрыть">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
+      <header class="top">
+        <span class="pill" id="recWhat"></span>
+        <button class="pill icon-only" id="close" aria-label="Закрыть"><i data-i="x"></i></button>
       </header>
-      <h1 class="display hook" id="recHead"></h1>
-      <div class="stage rec-stage"><canvas id="cv2"></canvas></div>
+      <div class="stage"><canvas id="cv2"></canvas></div>
       <p class="rec-text" id="recText"></p>
-      <p class="caption" id="recNote"></p>
+      <p class="rec-note" id="recNote"></p>
       <div class="rec-controls" id="recIdle">
-        <button class="rec-btn" id="recBtn" aria-label="Запись"><i></i></button>
+        <button class="rec-btn" id="recBtn" aria-label="Начать запись"><i data-i="mic"></i></button>
       </div>
       <div class="rec-controls" id="recDone" hidden>
-        <button class="pill" id="again">Заново</button>
-        <button class="pill" id="listenBack">Прослушать</button>
-        <button class="pill solid" id="publish">Опубликовать</button>
+        <button class="pill icon-only" id="again" aria-label="Записать заново"><i data-i="rotate"></i></button>
+        <button class="pill icon-only" id="listenBack" aria-label="Прослушать"><i data-i="play"></i></button>
+        <button class="pill dark" id="publish" aria-label="Опубликовать"><i data-i="send"></i></button>
       </div>
-      <p class="caption muted" id="recRules"></p>
     </div>
 
-    <!-- лист действий «⋯»: жалоба, скрыть, блок; для своих записей — удалить -->
+    <!-- лист действий -->
     <div class="sheet-backdrop" id="sheet" hidden>
-      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-        <p class="eyebrow" id="sheetTitle"></p>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">
+        <div class="sheet-grip"></div>
+        <p class="sheet-title" id="sheetTitle"></p>
         <p class="sheet-sub" id="sheetSub"></p>
         <div class="sheet-body" id="sheetBody"></div>
-        <button class="sheet-row cancel" id="sheetCancel">Отмена</button>
+        <button class="pill cancel" id="sheetCancel">Отмена</button>
       </div>
     </div>
 

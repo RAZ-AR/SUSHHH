@@ -1,37 +1,22 @@
 // «Кольцо расхождения» (по мотивам Rehoboam): тишина — идеально ровный тонкий круг,
 // голос «распушает» линию там, где он звучит. Кольцо — время записи по часовой стрелке
-// от верха. Реакции и ответы — метки с выносками на том моменте, к которому они относятся.
-// Единственное оранжевое — «сейчас» и только что поставленная метка.
+// от верха. Реакции и ответы — пузырьки на том моменте, к которому они относятся.
+// Никакого цвета, кроме эмодзи: «сейчас» — тёмная точка.
 
 export type Level = { level: number; tone: number };
 export type LevelSource = () => Level | null;
-export type Mark = { at: number; kind: "reply" | "reaction"; title: string; sub: string };
-// что написано внутри кольца: тег, автор, секунды пиксельными цифрами, подпись
-export type Readout = { top?: string; title?: string; digits?: string; label?: string; accent?: string };
+// реакция — светлый пузырёк «😂 8», ответ — тёмный «↳»
+export type Mark = { at: number; kind: "reply" | "reaction"; text: string };
+// внутри кольца: главное (автор или время) и тихая подпись под ним
+export type Readout = { title?: string; sub?: string; big?: boolean };
 
 export const N = 40; // разрешение огибающей записи
 const TRACE = 120; // разрешение живого следа при записи
 const FIBERS = 1500;
 
-const INK = "17,17,17";
-const GREY = "150,150,148";
-export const ACCENT = "#FF5B1F";
-const MONO = '"JetBrains Mono", ui-monospace, monospace';
-
-// 5×7 пиксельный шрифт для цифр
-const GLYPHS: Record<string, string[]> = {
-  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
-  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
-  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
-  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
-  "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
-  "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
-  "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
-  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
-  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
-  "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
-  ":": ["00000", "00100", "00100", "00000", "00100", "00100", "00000"],
-};
+const INK = "31,31,31";
+const GREY = "170,170,165";
+const SANS = '"Inter", -apple-system, "Helvetica Neue", Arial, sans-serif';
 
 export class Visual {
   private ctx: CanvasRenderingContext2D;
@@ -102,7 +87,7 @@ export class Visual {
 
   // геометрия кольца в CSS-пикселях — для перемотки пальцем по кольцу
   get ringRadiusCss() {
-    return (Math.min(this.w, this.h) * 0.255) / this.dpr;
+    return (Math.min(this.w, this.h) * 0.31) / this.dpr;
   }
 
   get level() {
@@ -145,7 +130,7 @@ export class Visual {
     ctx.clearRect(0, 0, this.w, this.h);
     const cx = this.w / 2;
     const cy = this.h / 2;
-    const R = Math.min(this.w, this.h) * 0.255;
+    const R = Math.min(this.w, this.h) * 0.31;
     const TAU = Math.PI * 2;
     const pos = (a: number, r: number) => [cx + Math.cos(a * TAU - Math.PI / 2) * r, cy + Math.sin(a * TAU - Math.PI / 2) * r];
     const live = !!s || this.tracing;
@@ -198,62 +183,55 @@ export class Visual {
     // «сейчас»
     if (p > 0 || live) {
       const [nx, ny] = pos(p, R);
-      ctx.fillStyle = ACCENT;
+      ctx.fillStyle = `rgb(${INK})`;
       ctx.beginPath();
-      ctx.arc(nx, ny, 4 * this.dpr, 0, TAU);
+      ctx.arc(nx, ny, 4.5 * this.dpr, 0, TAU);
       ctx.fill();
     }
 
     this.drawReadout(cx, cy, R);
   };
 
-  private drawMarks(cx: number, _cy: number, R: number, p: number, now: number, pos: (a: number, r: number) => number[]) {
+  private drawMarks(_cx: number, _cy: number, R: number, p: number, now: number, pos: (a: number, r: number) => number[]) {
     const ctx = this.ctx;
     const d = this.dpr;
-    const fs = 9.5 * d;
-    ctx.font = `500 ${fs}px ${MONO}`;
+    const fs = 12 * d;
+    const h = 24 * d;
+    ctx.font = `500 ${fs}px ${SANS}`;
     ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
     this.flashes = this.flashes.filter((f) => now - f.t0 < 1400);
 
     for (const m of this.marks) {
       const passed = m.at <= p + 0.002;
-      const hot = this.flashes.some((f) => Math.abs(f.at - m.at) < 0.03);
-      const col = hot ? ACCENT : passed ? `rgb(${INK})` : `rgba(${GREY},0.9)`;
       const spread = this.envAt(m.at);
-      const [ax, ay] = pos(m.at, R + spread * spread * 0.34 * R + 6 * d);
-      const [bx, by] = pos(m.at, R * 1.3 + 8 * d);
-      const right = bx >= cx;
-      const ex = bx + (right ? 6 : -6) * d;
-
-      ctx.strokeStyle = col;
-      ctx.fillStyle = col;
-      ctx.lineWidth = 0.8 * d;
+      const [x, y] = pos(m.at, R + spread * spread * 0.34 * R + 22 * d);
+      const w = Math.max(h, ctx.measureText(m.text).width + 16 * d);
+      // пузырёк не вылезает за края холста
+      const bx = Math.min(Math.max(x, w / 2 + 2 * d), this.w - w / 2 - 2 * d);
+      const by = Math.min(Math.max(y, h / 2 + 2 * d), this.h - h / 2 - 2 * d);
+      const reply = m.kind === "reply";
+      ctx.globalAlpha = passed ? 1 : 0.55;
+      ctx.fillStyle = reply ? `rgb(${INK})` : "#ffffff";
       ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.lineTo(ex, by);
-      ctx.stroke();
-      // ответ — квадрат, реакция — точка
-      if (m.kind === "reply") ctx.fillRect(ax - 2.5 * d, ay - 2.5 * d, 5 * d, 5 * d);
-      else {
-        ctx.beginPath();
-        ctx.arc(ax, ay, 2.2 * d, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      const room = right ? this.w - ex - 4 * d : ex - 4 * d;
-      ctx.textAlign = right ? "left" : "right";
-      const tx = ex + (right ? 4 : -4) * d;
-      ctx.fillText(fit(ctx, m.title, room), tx, by - fs * 0.62);
-      ctx.fillStyle = hot ? ACCENT : `rgba(${GREY},1)`;
-      ctx.fillText(fit(ctx, m.sub, room), tx, by + fs * 0.62);
+      ctx.roundRect(bx - w / 2, by - h / 2, w, h, h / 2);
+      ctx.fill();
+      ctx.fillStyle = reply ? "#ffffff" : `rgb(${INK})`;
+      ctx.fillText(m.text, bx, by + 0.5 * d);
+      // точка на самом кольце
+      const [rx, ry] = pos(m.at, R);
+      ctx.fillStyle = `rgb(${INK})`;
+      ctx.beginPath();
+      ctx.arc(rx, ry, 1.8 * d, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.textAlign = "left";
 
     for (const f of this.flashes) {
       const k = (now - f.t0) / 1400;
       const [fx, fy] = pos(f.at, R);
-      ctx.strokeStyle = ACCENT;
+      ctx.strokeStyle = `rgb(${INK})`;
       ctx.globalAlpha = 1 - k;
       ctx.lineWidth = 1.5 * d;
       ctx.beginPath();
@@ -263,54 +241,22 @@ export class Visual {
     }
   }
 
-  private drawReadout(cx: number, cy: number, R: number) {
+  private drawReadout(cx: number, cy: number, _R: number) {
     const ctx = this.ctx;
-    const { top, title, digits, label, accent } = this.readout;
+    const { title, sub, big } = this.readout;
     const d = this.dpr;
-    const room = R * 1.55;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-
-    if (top) {
-      ctx.font = `500 ${9.5 * d}px ${MONO}`;
-      ctx.fillStyle = ACCENT;
-      ctx.fillText(fit(ctx, top, room), cx, cy - R * 0.5);
-    }
+    const ts = (big ? 40 : 18) * d;
     if (title) {
-      ctx.font = `600 ${15 * d}px "Inter Tight", "Helvetica Neue", Arial, sans-serif`;
+      ctx.font = `${big ? 500 : 600} ${ts}px ${SANS}`;
       ctx.fillStyle = `rgb(${INK})`;
-      ctx.fillText(fit(ctx, title, room), cx, cy - R * 0.27);
+      ctx.fillText(fit(ctx, title, _R * 1.5), cx, sub ? cy - ts * 0.35 : cy);
     }
-    if (digits) {
-      const cell = Math.max(2, Math.round(R * (title ? 0.045 : 0.07)));
-      const gap = Math.max(1, Math.round(cell * 0.2));
-      const glyphW = 5 * cell;
-      const totalW = digits.length * glyphW + (digits.length - 1) * cell;
-      let x0 = Math.round(cx - totalW / 2);
-      const y0 = Math.round(title ? cy - R * 0.06 : cy - 3.5 * cell - (label ? cell : 0));
-      ctx.fillStyle = `rgb(${INK})`;
-      for (const ch of digits) {
-        const g = GLYPHS[ch];
-        if (g)
-          for (let r = 0; r < 7; r++)
-            for (let c = 0; c < 5; c++)
-              if (g[r][c] === "1") ctx.fillRect(x0 + c * cell, y0 + r * cell, cell - gap, cell - gap);
-        x0 += glyphW + cell;
-      }
-    }
-    if (label) {
-      ctx.font = `500 ${9.5 * d}px ${MONO}`;
-      const y = cy + R * (title ? 0.5 : 0.36);
-      const full = label + (accent ? " " + accent : "");
-      ctx.textAlign = "left";
-      let x = cx - ctx.measureText(full).width / 2;
+    if (sub) {
+      ctx.font = `500 ${13 * d}px ${SANS}`;
       ctx.fillStyle = `rgba(${GREY},1)`;
-      ctx.fillText(label, x, y);
-      if (accent) {
-        x += ctx.measureText(label + " ").width;
-        ctx.fillStyle = ACCENT;
-        ctx.fillText(accent, x, y);
-      }
+      ctx.fillText(fit(ctx, sub, _R * 1.5), cx, cy + (title ? ts * 0.6 : 0));
     }
     ctx.textAlign = "left";
   }
