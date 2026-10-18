@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0b0c" />
+    <title>SUSHHH</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <!-- главный: сторис самых обсуждаемых + потоки -->
+    <section class="app view" id="home">
+      <header class="top">
+        <div class="mark">SUSHHH</div>
+        <div class="meta">Эфир · 21:00–23:00</div>
+      </header>
+
+      <p class="section-title"><em>Обсуждают</em> сейчас</p>
+      <div class="stories" id="stories"></div>
+
+      <p class="section-title"><em>Потоки</em></p>
+      <div class="streams" id="streams"></div>
+
+      <nav class="bottom">
+        <button class="tab on" data-go="home">Слушать</button>
+        <button class="rec" data-rec aria-label="Записать"><i></i></button>
+        <button class="tab" data-go="mine">Моё <b class="dot" data-badge hidden></b></button>
+      </nav>
+    </section>
+
+    <!-- моё: ответы мне, очередь «ответить позже», мои записи и ветки -->
+    <section class="app view" id="mine" hidden>
+      <header class="top">
+        <div class="mark">SUSHHH</div>
+        <div class="meta" id="meName"></div>
+      </header>
+
+      <div class="mine-body">
+        <div class="mine-head">
+          <p class="section-title"><em>Тебе ответили</em> <span id="newCount"></span></p>
+          <button class="link" id="playNew" hidden>слушать новые</button>
+        </div>
+        <div class="rows" id="toMe"></div>
+
+        <p class="section-title"><em>Ответить позже</em></p>
+        <div class="rows" id="later"></div>
+
+        <p class="section-title"><em>Мои записи</em></p>
+        <div class="rows" id="myPosts"></div>
+
+        <p class="section-title"><em>Ветки с твоими ответами</em></p>
+        <div class="rows" id="myThreads"></div>
+      </div>
+
+      <nav class="bottom">
+        <button class="tab" data-go="home">Слушать</button>
+        <button class="rec" data-rec aria-label="Записать"><i></i></button>
+        <button class="tab on" data-go="mine">Моё <b class="dot" data-badge hidden></b></button>
+      </nav>
+    </section>
+
+    <!-- плеер: очередь записей одна за другой -->
+    <section class="app view" id="player" hidden>
+      <header class="top">
+        <button class="back" id="back" aria-label="Назад">
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <div class="meta" id="queueTitle"></div>
+      </header>
+
+      <div class="segments" id="segments"></div>
+
+      <div class="stage" id="stage">
+        <canvas id="cv"></canvas>
+        <div class="hint" id="hint">Нажми, чтобы слушать</div>
+        <div class="floaters" id="floaters"></div>
+      </div>
+
+      <section class="info">
+        <p class="legend">
+          <em id="now">Сейчас:</em> <span id="author"></span> · <span id="ago"></span>
+          <span class="badge" id="synth" hidden>синтез</span>
+        </p>
+        <h1 id="hook"></h1>
+        <p class="transcript" id="transcript" hidden></p>
+        <p class="tags" id="tags"></p>
+      </section>
+
+      <div class="reactions" id="reactions"></div>
+
+      <div class="controls">
+        <button class="ghost" id="prev" aria-label="Предыдущая">
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <button class="play" id="play" aria-label="Играть">
+          <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3v14H7zM14 5h3v14h-3z" /></svg>
+        </button>
+        <button class="ghost" id="next" aria-label="Следующая">
+          <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+        </button>
+      </div>
+
+      <div class="actions">
+        <button id="speed">1.25×</button>
+        <button id="tr">текст</button>
+        <button id="thread">ветка · 0</button>
+        <button id="laterBtn">позже</button>
+        <button id="reply" class="strong">ответить</button>
+      </div>
+    </section>
+
+    <!-- запись: пост до 30 с, ответ до 15 с -->
+    <div class="recorder" id="recorder" hidden>
+      <header class="top">
+        <div class="mark">SUSHHH</div>
+        <button class="close" id="close" aria-label="Закрыть">×</button>
+      </header>
+      <p class="legend rec-title" id="recTitle"><em>Новая запись</em></p>
+      <div class="stage rec-stage"><canvas id="cv2"></canvas></div>
+      <p class="timer" id="timer">0:00 <span>/ 0:30</span></p>
+      <p class="rec-note" id="recNote"></p>
+      <p class="rec-text" id="recText"></p>
+      <div class="rec-controls" id="recIdle">
+        <button class="rec big" id="recBtn" aria-label="Запись">
+          <svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" id="ring" /></svg>
+          <i></i>
+        </button>
+      </div>
+      <div class="rec-controls" id="recDone" hidden>
+        <button class="pill" id="again">заново</button>
+        <button class="pill" id="listenBack">прослушать</button>
+        <button class="pill solid" id="publish">опубликовать</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

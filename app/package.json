@@ -1,0 +1,17 @@
+{
+  "name": "sushhh-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "dev:phone": "vite --host --mode phone"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.4"
+  }
+}
