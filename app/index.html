@@ -67,16 +67,38 @@
 
     <!-- моё: тоже для слушания — новые ответы одной кнопкой, остальное кольцами -->
     <section class="app view" id="mine" hidden>
+      <button class="me-head" id="meOpen" data-i18n-aria="openProfile"><canvas id="meThumb"></canvas><span id="meHeadName"></span><i data-i="right"></i></button>
       <button class="pill dark big-play" id="playNew"><i data-i="play"></i><span id="playNewText"></span></button>
       <div class="seg-tabs" role="tablist">
         <button class="pill icon-only on" data-tab="toMe" role="tab" data-i18n-aria="tabToMe"><i data-i="message"></i></button>
         <button class="pill icon-only" data-tab="later" role="tab" data-i18n-aria="laterAria"><i data-i="clock"></i></button>
         <button class="pill icon-only" data-tab="posts" role="tab" data-i18n-aria="tabPosts"><i data-i="mic"></i></button>
         <button class="pill icon-only" data-tab="sounds" role="tab" data-i18n-aria="tabSounds"><i data-i="wave"></i></button>
-        <button class="pill icon-only" data-tab="blocked" role="tab" data-i18n-aria="tabBlocked"><i data-i="ban"></i></button>
       </div>
       <div class="grid" id="grid"></div>
 
+      <nav class="tabbar" data-i18n-aria="sectionsAria">
+        <button class="tab" data-go="home" data-i18n-aria="air"><i data-i="headphones"></i></button>
+        <button class="tab" data-rec data-i18n-aria="tabRec"><i data-i="mic"></i></button>
+        <button class="tab on" data-go="mine" data-i18n-aria="tabMine" aria-current="page"><i data-i="inbox"></i><b class="badge" data-badge hidden></b></button>
+      </nav>
+    </section>
+
+    <!-- личный кабинет: мой персонаж, псевдоним, тихая статистика, настройки и данные -->
+    <section class="app view me-view" id="me" hidden>
+      <header class="top">
+        <button class="pill icon-only" id="meBack" data-i18n-aria="backMine"><i data-i="left"></i></button>
+      </header>
+      <div class="me-scroll">
+      <div class="stage me-stage" id="meStage" role="button" tabindex="0" data-i18n-aria="meOrbAria">
+        <div class="orb" id="meOrb" aria-hidden="true"><div class="orb-rim"></div><div class="eyes"><i></i><i></i></div></div>
+      </div>
+      <p class="who" id="meName"></p>
+      <button class="pill quiet me-rename" id="meRename"><i data-i="rotate"></i><span data-i18n="newName"></span></button>
+      <p class="me-note" data-i18n="nameNote"></p>
+      <div class="me-stats" id="meStats" role="group" data-i18n-aria="statsAria"></div>
+      <div class="me-list" id="meList"></div>
+      </div>
       <nav class="tabbar" data-i18n-aria="sectionsAria">
         <button class="tab" data-go="home" data-i18n-aria="air"><i data-i="headphones"></i></button>
         <button class="tab" data-rec data-i18n-aria="tabRec"><i data-i="mic"></i></button>

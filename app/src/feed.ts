@@ -320,8 +320,35 @@ export async function deleteRecording(id: string) {
   }
 }
 
+const NAMES = ["полночь", "без_сахара", "тёплый_шум", "северный", "на_балконе", "медленно", "до_рассвета", "тихий_час", "лёгкий_ветер", "сонный_кот"];
+
+// новый псевдоним — любой другой из списка; аура (цвет голоса) сменится вместе с ним
+export function renameMe() {
+  const old = me();
+  const next = NAMES.filter((n) => n !== old)[Math.floor(Math.random() * (NAMES.length - 1))];
+  try {
+    localStorage.setItem("sushhh.name", next);
+  } catch {
+    // без хранилища псевдоним не сохранится
+  }
+  return next;
+}
+
+// стереть всё, что приложение хранит на устройстве: настройки, реакции, записи
+export async function eraseEverything() {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith("sushhh.") && k !== "sushhh.lang") localStorage.removeItem(k);
+  } catch {
+    // нечего стирать
+  }
+  await new Promise<void>((resolve) => {
+    const r = indexedDB.deleteDatabase("sushhh");
+    r.onsuccess = r.onerror = r.onblocked = () => resolve();
+  });
+}
+
 export function me() {
-  const names = ["полночь", "без_сахара", "тёплый_шум", "северный", "на_балконе", "медленно"];
+  const names = NAMES;
   try {
     let n = localStorage.getItem("sushhh.name");
     if (!n) {

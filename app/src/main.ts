@@ -1,7 +1,7 @@
 import { envelope, Player, Recorder } from "./audio";
 import {
-  addReaction, blockAuthor, blockedAuthors, deleteRecording, findPost, hidePost, isHeard, isLater, laterIds,
-  loadFeed, markHeard, me, mostDiscussed, myPosts, myThreads, removeLater, repliesToMe, report,
+  addReaction, blockAuthor, blockedAuthors, deleteRecording, eraseEverything, findPost, hidePost, isHeard, isLater, laterIds,
+  loadFeed, markHeard, me, mostDiscussed, myPosts, myThreads, reactionCount, removeLater, renameMe, repliesToMe, report,
   saveRecording, storedToPost, streams, toggleLater, unblockAuthor, unheardToMe, visible,
   type Moment, type Post, type ReportReason, type Stored, type Stream,
 } from "./feed";
@@ -61,16 +61,20 @@ const freshToMe = () => unheardToMe(feed).filter((x) => visible(x.reply) && visi
 
 // =================== навигация ===================
 
-type View = "home" | "mine";
+type View = "home" | "mine" | "me";
 let view: View = "home";
 
 function showView(v: View) {
   view = v;
   $("home").hidden = v !== "home";
   $("mine").hidden = v !== "mine";
+  $("me").hidden = v !== "me";
   if (v === "mine") {
     player.el.pause();
     renderMine();
+  } else if (v === "me") {
+    player.el.pause();
+    renderProfile();
   } else renderStories();
   updateBadge();
 }
@@ -842,7 +846,7 @@ async function openMakeSound(p: Post) {
 
 // =================== моё: всё для слушания ===================
 
-type MineTab = "toMe" | "later" | "posts" | "sounds" | "blocked";
+type MineTab = "toMe" | "later" | "posts" | "sounds";
 let mineTab: MineTab = "toMe";
 
 document.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => {
@@ -872,6 +876,9 @@ function emptyState(ic: string, text: string) {
 }
 
 function renderMine() {
+  $("meHeadName").textContent = me();
+  const thumb = $<HTMLCanvasElement>("meThumb");
+  queueMicrotask(() => drawRing(thumb, undefined, aura(me())));
   const fresh = freshToMe();
   $("playNewText").textContent = fresh.length ? tn("newReplies", fresh.length) : t("noNew");
   $("playNew").classList.toggle("quiet", !fresh.length);
@@ -903,27 +910,8 @@ function renderMine() {
       tile(p, p.mine ? t("you") : p.author, false, () => openThreadAt(p, p, "mine")),
     );
     if (!tiles.length) tiles = [emptyState("mic", t("emptyPosts"))];
-  } else if (mineTab === "sounds") {
-    tiles = soundTiles();
   } else {
-    tiles = blockedAuthors().map((name) => {
-      const r = document.createElement("div");
-      r.className = "blocked-row";
-      r.innerHTML = `<span>${escapeHtml(name)}</span>`;
-      const b = document.createElement("button");
-      b.className = "pill";
-      b.textContent = t("unblock");
-      b.onclick = () => {
-        unblockAuthor(name);
-        renderChannels();
-        renderStories();
-        renderMine();
-        toast(t("unblocked", { name }));
-      };
-      r.append(b);
-      return r;
-    });
-    if (!tiles.length) tiles = [emptyState("ban", t("emptyBlocked"))];
+    tiles = soundTiles();
   }
   g.append(...tiles);
 }
@@ -1028,6 +1016,147 @@ $("playNew").onclick = () => {
   if (!fresh.length) return;
   openQueue(fresh.map((x) => ({ post: x.reply, parent: x.root })), 0, "mine");
 };
+
+// =================== личный кабинет ===================
+
+$("meOpen").onclick = () => showView("me");
+$("meBack").onclick = () => showView("mine");
+
+// моя аура красит кнопки, которыми говорю я, и персонажа в кабинете
+function paintMe() {
+  const mine = aura(me());
+  document.documentElement.style.setProperty("--me1", hsl(mine[0], 1, 72));
+  document.documentElement.style.setProperty("--me2", hsl(mine[1], 1, 76));
+  paintAura($("meStage"), mine);
+}
+
+// персонаж в кабинете: коснулся — улыбнулся
+let meMoodTimer = 0;
+function greet() {
+  const orb = $("meOrb");
+  orb.classList.add("happy");
+  clearTimeout(meMoodTimer);
+  meMoodTimer = window.setTimeout(() => orb.classList.remove("happy"), 1400);
+}
+$("meStage").onclick = greet;
+$("meStage").onkeydown = (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), greet());
+
+$("meRename").onclick = () => {
+  const name = renameMe();
+  paintMe();
+  renderProfile();
+  greet();
+  toast(t("nowName", { name }));
+};
+
+function stat(ic: string, n: number, aria: string) {
+  const el = document.createElement("div");
+  el.className = "me-stat";
+  el.setAttribute("aria-label", aria);
+  el.innerHTML = `${icon(ic)}<b>${n.toLocaleString(lang)}</b>`;
+  return el;
+}
+
+function meRow(ic: string, label: string, onClick: () => void, danger = false) {
+  const b = document.createElement("button");
+  b.className = "sheet-row" + (danger ? " danger" : "");
+  b.innerHTML = `${icon(ic)}<span>${escapeHtml(label)}</span>`;
+  b.onclick = onClick;
+  return b;
+}
+
+function meSwitch(label: string, on: boolean, onToggle: () => void) {
+  const row = document.createElement("div");
+  row.className = "switch-row";
+  row.innerHTML = `<span>${escapeHtml(label)}</span>`;
+  const sw = document.createElement("button");
+  sw.className = "switch" + (on ? " on" : "");
+  sw.setAttribute("role", "switch");
+  sw.setAttribute("aria-checked", String(on));
+  sw.setAttribute("aria-label", label);
+  sw.onclick = onToggle;
+  row.append(sw);
+  return row;
+}
+
+function renderProfile() {
+  $("meName").textContent = me();
+  const posts = shown(myPosts(feed));
+  const replies = freshToMe().length + repliesToMe(feed).filter((x) => isHeard(x.reply.id)).length;
+  const reacts = posts.reduce((sum, p) => sum + reactionCount(p), 0);
+  $("meStats").replaceChildren(
+    stat("mic", posts.length, tn("posts", posts.length)),
+    stat("message", replies, tn("replies", replies)),
+    stat("heart", reacts, tn("reactions", reacts)),
+  );
+
+  const list = $("meList");
+  list.replaceChildren(
+    meRow("globe", `${t("language")} · ${LANGS.find((l) => l.id === lang)!.name}`, openLanguages),
+    meRow("speed", t("speed", { x: rate.toLocaleString(lang) }), () => {
+      rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
+      player.el.playbackRate = rate;
+      renderProfile();
+    }),
+    meSwitch(t("allowNoAsk"), allowsWithoutAsking(), () => {
+      setAllowWithoutAsking(!allowsWithoutAsking());
+      renderProfile();
+    }),
+    meRow("ban", t("blockedN", { n: blockedAuthors().length }), openBlocked),
+    meRow("trash", t("deleteAll"), confirmDeleteAll, true),
+    meRow("x", t("deleteAccount"), confirmDeleteAccount, true),
+  );
+}
+
+function openBlocked() {
+  const names = blockedAuthors();
+  openSheet(
+    t("tabBlocked"),
+    names.length ? t("unblockHint") : "",
+    names.map((name) => ({
+      icon: "ban",
+      label: name,
+      onClick: () => {
+        unblockAuthor(name);
+        renderChannels();
+        toast(t("unblocked", { name }));
+        renderProfile();
+        openBlocked();
+      },
+    })),
+    names.length ? "" : t("emptyBlocked"),
+  );
+}
+
+function confirmDeleteAll() {
+  openSheet(t("deleteAllTitle"), t("deleteAllSub"), [
+    {
+      icon: "trash",
+      label: t("deleteForever"),
+      danger: true,
+      onClick: async () => {
+        for (const p of myPosts(feed)) await deleteRecording(p.id);
+        closeSheet(false);
+        toast(t("deletedAll"));
+        renderProfile();
+      },
+    },
+  ]);
+}
+
+function confirmDeleteAccount() {
+  openSheet(t("deleteAccountTitle"), t("deleteAccountSub"), [
+    {
+      icon: "x",
+      label: t("deleteForever"),
+      danger: true,
+      onClick: async () => {
+        await eraseEverything();
+        location.reload();
+      },
+    },
+  ]);
+}
 
 // =================== запись ===================
 
@@ -1234,11 +1363,7 @@ $("close").onclick = closeRecorder;
 // =================== старт ===================
 
 // моя аура — цвет кнопок, которыми говорю я: «ответить» и записать
-{
-  const mine = aura(me());
-  document.documentElement.style.setProperty("--me1", hsl(mine[0], 1, 72));
-  document.documentElement.style.setProperty("--me2", hsl(mine[1], 1, 76));
-}
+paintMe();
 
 loadFeed().then((f) => {
   feed = f;

@@ -12,6 +12,7 @@ const LINE: Record<string, string> = {
   dots: "M5 12h.01M12 12h.01M19 12h.01",
   down: "M6 9l6 6 6-6",
   left: "M15 6l-6 6 6 6",
+  right: "M9 6l6 6-6 6",
   x: "M18 6L6 18M6 6l12 12",
   rotate: "M19.9 13A8 8 0 1 1 18 6.3M20 4v5h-5",
   send: "M10 14L21 3M21 3l-6.5 18-3.5-7-7-3.5z",

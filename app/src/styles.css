@@ -1160,3 +1160,67 @@ button:focus-visible, [role="button"]:focus-visible { outline-color: var(--warm)
 /* ядро крупнее: свет занимает почти всё тело, к краям гаснет */
 .orb-rim { inset: 2% 4% 8% 4%; filter: blur(calc(var(--r) * 0.16)); }
 .tile.new::after { background: var(--warm); box-shadow: 0 0 10px 2px rgba(236, 111, 91, 0.55); }
+
+/* =================== личный кабинет =================== */
+/* шапка «Моё»: мой персонаж и псевдоним — вход в кабинет */
+.me-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 4px 4px 4px 2px;
+  margin-bottom: 10px;
+  color: var(--ink);
+  font-size: 17px;
+  text-align: left;
+}
+.me-head canvas { width: 48px; height: 48px; flex: none; }
+.me-head span { flex: 1; }
+.me-head .ico { color: var(--mute); width: 20px; height: 20px; }
+.me-head:active { transform: scale(0.97); }
+
+/* листается середина, шапка и таббар стоят; край мягко растворяется */
+.me-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  margin: 0 -18px;
+  padding: 0 18px 12px;
+  -webkit-mask: linear-gradient(transparent, #000 12px, #000 calc(100% - 24px), transparent);
+  mask: linear-gradient(transparent, #000 12px, #000 calc(100% - 24px), transparent);
+}
+.me-scroll > * { flex: none; }
+.me-stage { flex: none; height: 230px; min-height: 0; --r: 76px; cursor: pointer; }
+.me-stage:focus-visible { outline: none; }
+.me-stage:focus-visible .orb { outline: 2px solid var(--warm); outline-offset: 6px; }
+.me-view .who { font-size: 24px; font-weight: 300; margin-top: 0; }
+.me-rename { margin: 10px auto 0; padding: 0 18px; height: 40px; gap: 8px; font-size: 14px; }
+.me-rename .ico { width: 18px; height: 18px; }
+.me-rename:active .ico { rotate: -180deg; transition: rotate 0.4s var(--spring); }
+.me-note { margin: 10px auto 0; max-width: 280px; text-align: center; font-size: 12.5px; font-weight: 300; line-height: 1.45; color: var(--mute); }
+
+/* тихая статистика: иконка и число, слова — для экранных читалок */
+.me-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 22px; }
+.me-stat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 52px;
+  border-radius: 18px;
+  background: var(--frost);
+  -webkit-backdrop-filter: var(--frost-blur);
+  backdrop-filter: var(--frost-blur);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), var(--soft-lift);
+  color: var(--icon);
+}
+.me-stat .ico { width: 19px; height: 19px; }
+.me-stat b { font-weight: 400; font-size: 18px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.me-list { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+.me-list .switch-row { padding: 8px 6px 8px 18px; min-height: 54px; border-radius: 20px; background: var(--frost); color: var(--ink); font-size: 16px; font-weight: 500; }
+.me-list .sheet-row.danger { background: rgba(255, 255, 255, 0.28); }
+.me-list > .sheet-row.danger:nth-last-child(2) { margin-top: 14px; }
