@@ -1,6 +1,8 @@
 // Данные: демо-записи с ветками, собственные записи из IndexedDB,
 // реакции, потоки и рейтинг обсуждаемости для сторис.
 
+import { t } from "./i18n";
+
 export type Post = {
   id: string;
   author: string;
@@ -140,7 +142,7 @@ function fromSeed(s: Seed): Post {
   };
   post.replies = (s.replies ?? [])
     .map((r) => ({
-      id: r.id, author: r.author ?? me(), mine: !r.author, createdAt: r.createdAt, text: r.text, hook: hookFrom(r.text, "Ответ"),
+      id: r.id, author: r.author ?? me(), mine: !r.author, createdAt: r.createdAt, text: r.text, hook: hookFrom(r.text, t("replyFallback")),
       tags: [], palette: s.palette, src: `/seed/${r.file}.m4a`, synthetic: true, reactions: { ...r.reactions },
       moments: seedMoments(r.id, r.reactions), at: REPLY_AT[r.id], replies: [],
     }))
@@ -344,7 +346,7 @@ export function hookFrom(text: string | undefined, fallback: string) {
 export function storedToPost(s: Stored): Post {
   return {
     id: s.id, author: me(), mine: true, createdAt: s.createdAt, palette: s.palette, src: URL.createObjectURL(s.blob),
-    hook: hookFrom(s.text, s.replyTo ? "Твой ответ" : "Твоя запись"), text: s.text, env: s.env, at: s.at,
+    hook: hookFrom(s.text, t(s.replyTo ? "yourReply" : "yourPost")), text: s.text, env: s.env, at: s.at,
     tags: s.replyTo ? [] : ["моё"], reactions: {}, moments: [], replies: [],
   };
 }
@@ -392,17 +394,17 @@ export function mostDiscussed(feed: Post[], n = 6) {
   return [...feed].filter((p) => p.replies.length > 0).sort((a, b) => discussion(b) - discussion(a)).slice(0, n);
 }
 
-export type Stream = { id: string; title: string; note: string; posts: Post[] };
+export type Stream = { id: string; title: string; posts: Post[] };
 
 export function streams(feed: Post[]): Stream[] {
   const has = (...tags: string[]) => (p: Post) => p.tags.some((t) => tags.includes(t));
   const list: Stream[] = [
-    { id: "foryou", title: "Для тебя", note: "свежее и обсуждаемое вперемешку", posts: forYou(feed) },
-    { id: "new", title: "Новое", note: "последние голоса", posts: [...feed].sort((a, b) => b.createdAt - a.createdAt) },
-    { id: "qod", title: "Вопрос дня", note: "Что тебя сегодня удивило?", posts: feed.filter(has("вопрос дня")).flatMap((p) => [p, ...p.replies]) },
-    { id: "confess", title: "Признания и мысли", note: "о личном", posts: feed.filter(has("признание", "мысль", "настроение")) },
-    { id: "stories", title: "Истории", note: "смешное и неожиданное", posts: feed.filter(has("история", "юмор")) },
-    { id: "city", title: "Город", note: "куда сходить и что вокруг", posts: feed.filter(has("город", "вопрос")) },
+    { id: "foryou", title: t("chan.foryou"), posts: forYou(feed) },
+    { id: "new", title: t("chan.new"), posts: [...feed].sort((a, b) => b.createdAt - a.createdAt) },
+    { id: "qod", title: t("chan.qod"), posts: feed.filter(has("вопрос дня")).flatMap((p) => [p, ...p.replies]) },
+    { id: "confess", title: t("chan.confess"), posts: feed.filter(has("признание", "мысль", "настроение")) },
+    { id: "stories", title: t("chan.stories"), posts: feed.filter(has("история", "юмор")) },
+    { id: "city", title: t("chan.city"), posts: feed.filter(has("город", "вопрос")) },
   ];
   return list.filter((s) => s.posts.length > 0);
 }
@@ -418,12 +420,6 @@ function forYou(feed: Post[]) {
   return out;
 }
 
-export function ago(t: number) {
-  const m = Math.round((Date.now() - t) / 60000);
-  if (m < 1) return "только что";
-  if (m < 60) return `${m} мин назад`;
-  return `${Math.round(m / 60)} ч назад`;
-}
 
 // --- раздел «Моё» ---
 

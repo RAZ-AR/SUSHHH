@@ -1,5 +1,8 @@
 // Живая расшифровка через Web Speech API (Chrome, Safari).
 // Где API нет — просто молчит: запись работает и без текста.
+// Язык распознавания — язык интерфейса.
+
+import { speechLang } from "./i18n";
 
 type Rec = {
   lang: string;
@@ -28,7 +31,7 @@ export class LiveTranscript {
     if (!Ctor) return;
     try {
       const r = new Ctor();
-      r.lang = "ru-RU";
+      r.lang = speechLang;
       r.continuous = true;
       r.interimResults = true;
       r.onresult = (e) => {

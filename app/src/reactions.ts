@@ -8,11 +8,6 @@ export const REACTIONS = ["❤️", "😂", "🤗", "🔥", "😮", "👏"] as c
 export const MEMES = ["🥁", "🎺", "🦗", "😱", "📯", "🎉"] as const;
 export type Reaction = (typeof REACTIONS)[number] | (typeof MEMES)[number];
 
-// подписи для экранных читалок и подсказок
-export const NAMES: Record<Reaction, string> = {
-  "❤️": "сердце", "😂": "смех", "🤗": "обнять", "🔥": "огонь", "😮": "вау", "👏": "аплодисменты",
-  "🥁": "ба-дум-тсс", "🎺": "грустный тромбон", "🦗": "сверчки", "😱": "дун-дун-дуун", "📯": "клаксон", "🎉": "та-да",
-};
 
 type Ctx = AudioContext;
 

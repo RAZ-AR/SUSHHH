@@ -6,8 +6,9 @@ import {
   type Moment, type Post, type ReportReason, type Stored, type Stream,
 } from "./feed";
 import { aura, auraGradient, hsl, paintAura } from "./aura";
+import { LANGS, lang, setLang, t, tn, translateDom } from "./i18n";
 import { icon, paintIcons } from "./icons";
-import { MEMES, NAMES, playReaction, REACTIONS, type Reaction } from "./reactions";
+import { MEMES, playReaction, REACTIONS, type Reaction } from "./reactions";
 import {
   allowsWithoutAsking, authorAllows, countUse, createSound, durationOf, isSoundKey, liveSounds, MAX_DUR, mySounds,
   playClip, requestsForMe, setAllowWithoutAsking, setStatus, SOUND_ICONS, soundByKey, soundKey, wordsAt,
@@ -18,6 +19,7 @@ import { drawRing } from "./thumbs";
 import { N, Visual, type Mark } from "./visual";
 
 paintIcons();
+translateDom();
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -37,14 +39,6 @@ function ensureEnv(p: Post): Promise<void> {
     pending.set(p, job);
   }
   return job;
-}
-
-function plural(n: number, one: string, few: string, many: string) {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
 }
 
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.max(0, Math.floor(sec % 60))).padStart(2, "0")}`;
@@ -161,12 +155,12 @@ const cur = () => items[qi];
 
 function renderChannels() {
   channels = streams(shown(feed));
-  $("chanName").textContent = channels.find((c) => c.id === channelId)?.title ?? "Эфир";
+  $("chanName").textContent = channels.find((c) => c.id === channelId)?.title ?? t("air");
 }
 
 $("chanBtn").onclick = () =>
   openSheet(
-    "Что слушаем",
+    t("listenWhat"),
     "",
     channels.map((c) => ({
       icon: c.id === channelId ? "check" : "headphones",
@@ -186,7 +180,7 @@ function renderStories() {
   stories.forEach((p, i) => {
     const b = document.createElement("button");
     b.className = "story" + (seen.has(p.id) ? " seen" : "");
-    b.setAttribute("aria-label", `${p.author}, ${p.replies.length} ${plural(p.replies.length, "ответ", "ответа", "ответов")}`);
+    b.setAttribute("aria-label", `${p.author}, ${tn("replies", p.replies.length)}`);
     b.innerHTML = `<canvas></canvas>`;
     b.style.setProperty("--ring", auraGradient(aura(p.author)));
     b.onclick = () => openStory(i);
@@ -248,7 +242,7 @@ function setQueue(start: number, play: boolean) {
   const inQueue = mode.kind !== "radio";
   $("context").hidden = !inQueue;
   $("stories").hidden = inQueue;
-  $("back").setAttribute("aria-label", mode.kind === "list" && mode.back === "mine" ? "Назад в «Моё»" : "Назад в эфир");
+  $("back").setAttribute("aria-label", t(mode.kind === "list" && mode.back === "mine" ? "backMine" : "backHome"));
   if (play && started) void playAt(start);
   else {
     qi = Math.max(0, Math.min(start, items.length - 1));
@@ -289,7 +283,7 @@ function show() {
   }
   $("hook").textContent = p.hook;
   $("hook").classList.remove("open");
-  $("transcript").textContent = p.text ?? "Расшифровка появится после обработки.";
+  $("transcript").textContent = p.text ?? t("transcriptPending");
   $("transcript").hidden = true;
   $("live").textContent = `${p.author}: ${p.hook}`;
   const n = shown(rootOf(cur()).replies).length;
@@ -338,7 +332,7 @@ function playThread() {
   const it = cur();
   const root = rootOf(it);
   const replies = shown(root.replies);
-  if (!replies.length) return toast("Ответов пока нет — будь первым");
+  if (!replies.length) return toast(t("noReplies"));
   openThreadAt(root, it.parent ? it.post : replies[0], view);
 }
 
@@ -520,7 +514,7 @@ $("heartBtn").onclick = () => {
   try {
     if (!localStorage.getItem("sushhh.hintFan")) {
       localStorage.setItem("sushhh.hintFan", "1");
-      setTimeout(() => toast("Удерживай ♡ — другие реакции"), 900);
+      setTimeout(() => toast(t("holdHeart")), 900);
     }
   } catch {
     // без хранилища подсказка просто не покажется
@@ -531,7 +525,7 @@ $("heartBtn").onkeydown = (e) => {
 };
 // веер: верхний ряд — эмоции, нижний — ситком-мемы
 const fanRow = (list: readonly Reaction[]) =>
-  `<div class="fan-row">${list.map((r) => `<button data-r="${r}" aria-label="${NAMES[r]}" title="${NAMES[r]}"><span>${r}</span></button>`).join("")}</div>`;
+  `<div class="fan-row">${list.map((r) => `<button data-r="${r}" aria-label="${t(`r.${r}`)}" title="${t(`r.${r}`)}"><span>${r}</span></button>`).join("")}</div>`;
 function renderFan() {
   const community = liveSounds().slice(0, 6);
   $("fan").innerHTML =
@@ -539,7 +533,7 @@ function renderFan() {
     fanRow(MEMES) +
     (community.length
       ? `<div class="fan-row community">${community
-          .map((c) => `<button data-s="${c.id}" aria-label="Звук «${escapeHtml(c.name)}»" title="${escapeHtml(c.name)}"><span>${c.icon}</span></button>`)
+          .map((c) => `<button data-s="${c.id}" aria-label="${escapeHtml(t("soundAria", { name: c.name }))}" title="${escapeHtml(c.name)}"><span>${c.icon}</span></button>`)
           .join("")}</div>`
       : "");
 }
@@ -548,7 +542,7 @@ renderFan();
 // у мема есть имя — один раз подскажем, что это было
 const memeSet = new Set<string>(MEMES);
 function toastMeme(r: Reaction) {
-  if (memeSet.has(r)) toast(NAMES[r]);
+  if (memeSet.has(r)) toast(t(`r.${r}`));
 }
 $("fan").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("[data-r], [data-s]");
@@ -634,7 +628,7 @@ $("startBtn").addEventListener("pointerup", (e) => e.stopPropagation());
 $("laterBtn").onclick = () => {
   const on = toggleLater(cur().post.id);
   $("laterBtn").classList.toggle("on", on);
-  toast(on ? "Сохранено в «Моё»" : "Убрано из «позже»");
+  toast(t(on ? "savedLater" : "removedLater"));
 };
 $("hook").onclick = () => {
   $("hook").classList.toggle("open");
@@ -677,52 +671,44 @@ function dropHidden() {
   }
 }
 
-const REASONS: { id: ReportReason; label: string }[] = [
-  { id: "abuse", label: "Оскорбления или травля" },
-  { id: "danger", label: "Угрозы или опасные действия" },
-  { id: "sexual", label: "Сексуальный контент" },
-  { id: "personal", label: "Раскрыты личные данные" },
-  { id: "spam", label: "Спам или реклама" },
-  { id: "crisis", label: "Автору может быть нужна помощь" },
-  { id: "other", label: "Другое" },
-];
+const REASONS: ReportReason[] = ["abuse", "danger", "sexual", "personal", "spam", "crisis", "other"];
 
 function openReport(p: Post) {
   openSheet(
-    "Что не так?",
+    t("reportTitle"),
     "",
     REASONS.map((r) => ({
-      icon: r.id === "crisis" ? "heart" : "flag",
-      label: r.label,
+      icon: r === "crisis" ? "heart" : "flag",
+      label: t(`reason.${r}`),
       onClick: () => {
-        report(p.id, r.id);
-        if (r.id === "crisis") {
+        report(p.id, r);
+        if (r === "crisis") {
           openSheet(
-            "Спасибо за сигнал",
-            "Модераторы посмотрят эту запись в первую очередь. Если кому-то угрожает опасность прямо сейчас — звони 112 или в местную экстренную службу.",
-            [{ icon: "check", label: "Понятно", onClick: () => (closeSheet(false), dropHidden()) }],
+            t("thanks"),
+            t("crisisNote"),
+            [{ icon: "check", label: t("gotIt"), onClick: () => (closeSheet(false), dropHidden()) }],
           );
           return;
         }
         closeSheet(false);
-        toast("Жалоба отправлена");
+        toast(t("reported"));
         dropHidden();
       },
     })),
-    "Автор не узнает, кто пожаловался. Запись пропадёт из твоего эфира.",
+    t("reportNote"),
   );
 }
 
 function confirmBlock(p: Post) {
-  openSheet(`Заблокировать ${p.author}?`, "Записи и ответы этого человека пропадут из твоего эфира. Вернуть можно в «Моё».", [
+  openSheet(t("blockTitle", { name: p.author }), t("blockSub"), [
     {
       icon: "ban",
-      label: "Заблокировать",
+      label: t("block"),
       danger: true,
       onClick: () => {
         blockAuthor(p.author);
         closeSheet(false);
-        toast(`${p.author} — в блоке`);
+        toast(t("blocked", { name: p.author }));
         dropHidden();
       },
     },
@@ -730,19 +716,27 @@ function confirmBlock(p: Post) {
 }
 
 function confirmDelete(p: Post) {
-  openSheet("Удалить запись?", "Ответы других людей останутся с пометкой «исходная запись удалена».", [
+  openSheet(t("deleteTitle"), t("deleteSub"), [
     {
       icon: "trash",
-      label: "Удалить навсегда",
+      label: t("deleteForever"),
       danger: true,
       onClick: async () => {
         await deleteRecording(p.id);
         closeSheet(false);
-        toast("Запись удалена");
+        toast(t("deleted"));
         dropHidden();
       },
     },
   ]);
+}
+
+function openLanguages() {
+  openSheet(
+    t("language"),
+    "",
+    LANGS.map((l) => ({ icon: l.id === lang ? "check" : "globe", label: l.name, on: l.id === lang, onClick: () => setLang(l.id) })),
+  );
 }
 
 $("moreBtn").onclick = () => {
@@ -751,34 +745,36 @@ $("moreBtn").onclick = () => {
   player.el.pause();
   const speedRow: SheetRow = {
     icon: "speed",
-    label: `Скорость ${rate}×`,
+    label: t("speed", { x: rate.toLocaleString(lang) }),
     onClick: () => {
       rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
       player.el.playbackRate = rate;
       closeSheet();
-      toast(`Скорость ${rate}×`);
+      toast(t("speed", { x: rate.toLocaleString(lang) }));
     },
   };
-  const soundRow: SheetRow = { icon: "scissors", label: "Сделать звук из этого момента", onClick: () => void openMakeSound(p) };
+  const soundRow: SheetRow = { icon: "scissors", label: t("makeSound"), onClick: () => void openMakeSound(p) };
+  const langRow: SheetRow = { icon: "globe", label: `${t("language")} · ${LANGS.find((l) => l.id === lang)!.name}`, onClick: openLanguages };
   if (p.mine) {
-    openSheet(p.author, "", [speedRow, soundRow, { icon: "trash", label: "Удалить запись", danger: true, onClick: () => confirmDelete(p) }]);
+    openSheet(p.author, "", [speedRow, soundRow, langRow, { icon: "trash", label: t("deletePost"), danger: true, onClick: () => confirmDelete(p) }]);
     return;
   }
   openSheet(p.author, "", [
     speedRow,
     soundRow,
-    { icon: "flag", label: "Пожаловаться", onClick: () => openReport(p) },
+    langRow,
+    { icon: "flag", label: t("report"), onClick: () => openReport(p) },
     {
       icon: "hide",
-      label: "Скрыть эту запись",
+      label: t("hide"),
       onClick: () => {
         hidePost(p.id);
         closeSheet(false);
-        toast("Запись скрыта");
+        toast(t("hidden"));
         dropHidden();
       },
     },
-    { icon: "ban", label: `Заблокировать ${p.author}`, danger: true, onClick: () => confirmBlock(p) },
+    { icon: "ban", label: t("blockNamed", { name: p.author }), danger: true, onClick: () => confirmBlock(p) },
   ]);
 };
 
@@ -797,7 +793,7 @@ async function openMakeSound(p: Post) {
   try {
     d = await durationOf(p.src);
   } catch {
-    return toast("Не получилось открыть запись");
+    return toast(t("cantOpen"));
   }
   const played = cur()?.post === p && player.el.currentTime > 0;
   const center = played ? player.el.currentTime : hotMoment(p) * d;
@@ -811,37 +807,37 @@ async function openMakeSound(p: Post) {
   box.className = "make";
   box.innerHTML = `
     <p class="quote">«${escapeHtml(name)}»</p>
-    <div class="icons">${SOUND_ICONS.map((ic, i) => `<button data-ic="${ic}" class="${i ? "" : "on"}" aria-label="Значок ${ic}">${ic}</button>`).join("")}</div>
+    <div class="icons">${SOUND_ICONS.map((ic, i) => `<button data-ic="${ic}" class="${i ? "" : "on"}" aria-label="${t("iconAria", { x: ic })}">${ic}</button>`).join("")}</div>
     <div class="row">
       <button class="pill" data-act="play">${icon("play")}${clock(dur)}</button>
-      <button class="pill dark" data-act="make">${icon("check")}Сделать звук</button>
+      <button class="pill dark" data-act="make">${icon("check")}${t("makeDo")}</button>
     </div>
-    <p class="hint">${allowed ? "Автор разрешает звуки — появится в веере сразу." : "Спросим автора — звук появится, когда автор разрешит."}</p>`;
+    <p class="hint">${t(allowed ? "makeAllowed" : "makeAsk")}</p>`;
   box.addEventListener("click", (e) => {
-    const t = e.target as HTMLElement;
-    const ic = t.closest<HTMLElement>("[data-ic]");
+    const target = e.target as HTMLElement;
+    const ic = target.closest<HTMLElement>("[data-ic]");
     if (ic) {
       chosen = ic.dataset.ic!;
       box.querySelectorAll("[data-ic]").forEach((x) => x.classList.toggle("on", x === ic));
       return;
     }
-    const act = t.closest<HTMLElement>("[data-act]")?.dataset.act;
+    const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     if (act === "play") void playClip(p.src, start, dur, player.fx(dur * 1000 + 300));
     if (act === "make") {
-      const snd = createSound({ postId: p.id, author: p.author, start, dur, icon: chosen, name, by: "ты" }, allowed);
+      const snd = createSound({ postId: p.id, author: p.author, start, dur, icon: chosen, name, by: t("you") }, allowed);
       closeSheet();
       renderFan();
-      if (allowed) return toast(`${chosen} теперь в веере`);
-      toast("Спросили автора");
+      if (allowed) return toast(t("inFan", { icon: chosen }));
+      toast(t("asked"));
       // в прототипе «ответ автора» имитируется через несколько секунд
       setTimeout(() => {
         setStatus(snd.id, "live");
         renderFan();
-        toast(`${chosen} «${name}» — звук одобрен`);
+        toast(t("approved", { icon: chosen, name }));
       }, 8000);
     }
   });
-  openSheet("Новый звук", "Кусок этой записи станет реакцией для всех.", [], "", box);
+  openSheet(t("makeTitle"), t("makeSub"), [], "", box);
 }
 
 // =================== моё: всё для слушания ===================
@@ -857,15 +853,15 @@ document.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => {
 });
 
 function tile(p: Post, name: string, isNew: boolean, onOpen: () => void) {
-  const t = document.createElement("button");
-  t.className = "tile" + (isNew ? " new" : "");
-  t.setAttribute("aria-label", `${name}: ${p.hook}${isNew ? ", новое" : ""}`);
-  t.innerHTML = `<canvas></canvas><span>${escapeHtml(name)}</span>`;
-  t.onclick = onOpen;
-  const cv = t.querySelector("canvas")!;
+  const el = document.createElement("button");
+  el.className = "tile" + (isNew ? " new" : "");
+  el.setAttribute("aria-label", `${name}: ${p.hook}${isNew ? t("newAria") : ""}`);
+  el.innerHTML = `<canvas></canvas><span>${escapeHtml(name)}</span>`;
+  el.onclick = onOpen;
+  const cv = el.querySelector("canvas")!;
   queueMicrotask(() => drawRing(cv, p.env, aura(p.author)));
   void ensureEnv(p).then(() => drawRing(cv, p.env, aura(p.author)));
-  return t;
+  return el;
 }
 
 function emptyState(ic: string, text: string) {
@@ -877,9 +873,7 @@ function emptyState(ic: string, text: string) {
 
 function renderMine() {
   const fresh = freshToMe();
-  $("playNewText").textContent = fresh.length
-    ? `${fresh.length} ${plural(fresh.length, "новый ответ", "новых ответа", "новых ответов")}`
-    : "Новых ответов нет";
+  $("playNewText").textContent = fresh.length ? tn("newReplies", fresh.length) : t("noNew");
   $("playNew").classList.toggle("quiet", !fresh.length);
   $("playNew").classList.toggle("dark", !!fresh.length);
 
@@ -897,18 +891,18 @@ function renderMine() {
     tiles = repliesToMe(feed)
       .filter((x) => visible(x.reply) && visible(x.root))
       .map(({ reply, root }) => tile(reply, reply.author, !isHeard(reply.id), () => openThreadAt(root, reply, "mine")));
-    if (!tiles.length) tiles = [emptyState("message", "Ответь кому-нибудь или запиши своё — ответы появятся здесь")];
+    if (!tiles.length) tiles = [emptyState("message", t("emptyToMe"))];
   } else if (mineTab === "later") {
     tiles = laterIds()
       .flatMap((id) => findPost(feed, id) ?? [])
       .filter((x) => visible(x.post))
       .map(({ post, root }) => tile(post, post.author, false, () => openThreadAt(root, post, "mine")));
-    if (!tiles.length) tiles = [emptyState("clock", "Нажми часы во время прослушивания — запись подождёт тебя здесь")];
+    if (!tiles.length) tiles = [emptyState("clock", t("emptyLater"))];
   } else if (mineTab === "posts") {
     tiles = [...shown(myPosts(feed)), ...shown(myThreads(feed))].map((p) =>
-      tile(p, p.mine ? "ты" : p.author, false, () => openThreadAt(p, p, "mine")),
+      tile(p, p.mine ? t("you") : p.author, false, () => openThreadAt(p, p, "mine")),
     );
-    if (!tiles.length) tiles = [emptyState("mic", "Своих записей пока нет. Микрофон внизу — до 30 секунд")];
+    if (!tiles.length) tiles = [emptyState("mic", t("emptyPosts"))];
   } else if (mineTab === "sounds") {
     tiles = soundTiles();
   } else {
@@ -918,18 +912,18 @@ function renderMine() {
       r.innerHTML = `<span>${escapeHtml(name)}</span>`;
       const b = document.createElement("button");
       b.className = "pill";
-      b.textContent = "Вернуть";
+      b.textContent = t("unblock");
       b.onclick = () => {
         unblockAuthor(name);
         renderChannels();
         renderStories();
         renderMine();
-        toast(`${name} — снова в эфире`);
+        toast(t("unblocked", { name }));
       };
       r.append(b);
       return r;
     });
-    if (!tiles.length) tiles = [emptyState("ban", "Никого. Заблокировать можно через «⋯» в эфире")];
+    if (!tiles.length) tiles = [emptyState("ban", t("emptyBlocked"))];
   }
   g.append(...tiles);
 }
@@ -969,23 +963,23 @@ function soundTiles(): HTMLElement[] {
 
   const reqs = requestsForMe(ids);
   if (reqs.length) {
-    section("Просят сделать звук");
+    section(t("sndRequests"));
     for (const c of reqs)
       out.push(
-        soundRow(c, `${c.by} хочет звук`, c.name, [
-          pillBtn(icon("play"), "Послушать", () => previewSound(c)),
-          pillBtn(icon("x"), "Отказать", () => {
+        soundRow(c, t("sndWants", { name: c.by }), c.name, [
+          pillBtn(icon("play"), t("listen"), () => previewSound(c)),
+          pillBtn(icon("x"), t("decline"), () => {
             setStatus(c.id, "declined");
             renderMine();
             updateBadge();
-            toast("Отказано");
+            toast(t("declined"));
           }),
-          pillBtn(icon("check"), "Разрешить", () => {
+          pillBtn(icon("check"), t("allow"), () => {
             setStatus(c.id, "live");
             renderFan();
             renderMine();
             updateBadge();
-            toast(`${c.icon} теперь звук сообщества`);
+            toast(t("nowCommunity", { icon: c.icon }));
           }, true),
         ]),
       );
@@ -993,16 +987,16 @@ function soundTiles(): HTMLElement[] {
 
   const live = mySounds(ids);
   if (live.length) {
-    section("Твои звуки");
+    section(t("yourSounds"));
     for (const c of live)
       out.push(
-        soundRow(c, c.uses ? `звучал ${c.uses} ${plural(c.uses, "раз", "раза", "раз")}` : "ещё не звучал", c.name, [
-          pillBtn(icon("play"), "Послушать", () => previewSound(c)),
-          pillBtn(icon("x"), "Отозвать", () => {
+        soundRow(c, c.uses ? tn("played", c.uses) : t("notPlayed"), c.name, [
+          pillBtn(icon("play"), t("listen"), () => previewSound(c)),
+          pillBtn(icon("x"), t("revoke"), () => {
             setStatus(c.id, "revoked");
             renderFan();
             renderMine();
-            toast("Звук отозван");
+            toast(t("revoked"));
           }),
         ]),
       );
@@ -1012,12 +1006,12 @@ function soundTiles(): HTMLElement[] {
   const on = allowsWithoutAsking();
   const row = document.createElement("div");
   row.className = "switch-row";
-  row.innerHTML = `<span>Разрешать звуки без вопроса</span>`;
+  row.innerHTML = `<span>${escapeHtml(t("allowNoAsk"))}</span>`;
   const sw = document.createElement("button");
   sw.className = "switch" + (on ? " on" : "");
   sw.setAttribute("role", "switch");
   sw.setAttribute("aria-checked", String(on));
-  sw.setAttribute("aria-label", "Разрешать звуки из моих записей без вопроса");
+  sw.setAttribute("aria-label", t("allowNoAskAria"));
   sw.onclick = () => {
     setAllowWithoutAsking(!on);
     renderMine();
@@ -1025,7 +1019,7 @@ function soundTiles(): HTMLElement[] {
   row.append(sw);
   out.push(row);
 
-  if (!reqs.length && !live.length) out.unshift(emptyState("wave", "Когда кто-то захочет сделать звук из твоей записи, ты решишь здесь"));
+  if (!reqs.length && !live.length) out.unshift(emptyState("wave", t("emptySounds")));
   return out;
 }
 
@@ -1068,7 +1062,7 @@ function openRecorder(to: Post | null, at?: number) {
   const mine = aura(me());
   paintAura($("recStage"), mine);
   recVisual.setAura(mine);
-  $("recWhat").innerHTML = to ? `${icon("reply")}${escapeHtml(to.author)}` : `${icon("mic")}до ${POST_MS / 1000} с`;
+  $("recWhat").innerHTML = to ? `${icon("reply")}${escapeHtml(to.author)}` : `${icon("mic")}${t("upTo", { n: POST_MS / 1000 })}`;
   reset();
   $("recorder").hidden = false;
 }
@@ -1097,12 +1091,12 @@ function setRecState(s: "idle" | "live" | "done", note?: string) {
   recState = s;
   const btn = $("recBtn");
   btn.classList.toggle("live", s === "live");
-  btn.setAttribute("aria-label", s === "live" ? "Остановить запись" : "Начать запись");
+  btn.setAttribute("aria-label", t(s === "live" ? "stopRec" : "startRec"));
   setIcon(btn, s === "live" ? "stop" : "mic");
   $("recIdle").hidden = s === "done";
   $("recDone").hidden = s !== "done";
   $("recNote").textContent =
-    note ?? (s === "idle" ? "Нажми или удерживай" : s === "done" ? (replyTo ? "Ответ услышит автор" : "24 часа в эфире") : "");
+    note ?? (s === "idle" ? t("recHint") : s === "done" ? t(replyTo ? "recReplyHeard" : "recOnAir") : "");
   if (s === "idle") {
     setTimer(0);
     $("recText").textContent = "";
@@ -1114,7 +1108,7 @@ function setRecState(s: "idle" | "live" | "done", note?: string) {
 function setTimer(ms: number) {
   const total = maxMs / 1000;
   const sec = Math.min(total, Math.floor(ms / 1000));
-  $("recTime").textContent = recState === "live" && total - sec <= 5 ? `${clock(sec)} · ещё ${total - sec} с` : clock(sec);
+  $("recTime").textContent = recState === "live" && total - sec <= 5 ? `${clock(sec)} · ${t("recLeft", { n: total - sec })}` : clock(sec);
   $("recHairFill").style.width = recState === "live" ? `${Math.min(1, ms / maxMs) * 100}%` : "0%";
 }
 
@@ -1122,7 +1116,7 @@ async function startRec() {
   try {
     await recorder.start(maxMs, () => void stopRec());
   } catch {
-    setRecState("idle", "Нужен доступ к микрофону");
+    setRecState("idle", t("needMic"));
     return;
   }
   setRecState("live");
@@ -1142,7 +1136,7 @@ async function stopRec() {
   recVisual.setProgress(0);
   if (dur < MIN_MS) {
     reset();
-    setRecState("idle", "Слишком коротко — скажи пару слов");
+    setRecState("idle", t("tooShort"));
     return;
   }
   let env: number[] = [];
@@ -1224,7 +1218,7 @@ $("publish").onclick = async () => {
     if (view === "mine") renderMine();
   }
   renderStories();
-  toast(wasReply ? "Ответ отправлен" : "В эфире");
+  toast(t(wasReply ? "replySent" : "onAirNow"));
 };
 
 // ответ привязывается к моменту: где сейчас пауза в исходной записи,
