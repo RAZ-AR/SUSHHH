@@ -7,7 +7,7 @@
     <title>SUSHHH</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500&display=swap" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
@@ -39,16 +39,18 @@
       <div class="stage" id="stage" aria-label="Кольцо записи: тап — пауза, свайп вверх — дальше, двойной тап — сердце">
         <div class="disc"></div>
         <canvas id="cv"></canvas>
+        <button class="start" id="startBtn" aria-label="Слушать эфир"><i data-i="play"></i></button>
         <div class="floaters" id="floaters"></div>
         <p class="sr-only" aria-live="polite" id="live"></p>
       </div>
 
+      <p class="who" id="who"></p>
+      <div class="hair" id="hair" role="slider" tabindex="0" aria-label="Позиция в записи" aria-valuemin="0" aria-valuemax="100"><i id="hairFill"></i></div>
       <p class="hook" id="hook" role="button" tabindex="0" aria-label="Показать расшифровку"></p>
       <p class="transcript" id="transcript" hidden></p>
 
       <div class="actions">
-        <button class="pill" id="heartBtn" aria-label="Сердце"><i data-i="heart"></i><small id="heartCount"></small></button>
-        <button class="pill icon-only" id="fanBtn" aria-label="Реакции"><i data-i="smile"></i></button>
+        <button class="pill" id="heartBtn" aria-label="Сердце. Удерживай — другие реакции"><i data-i="heart"></i><small id="heartCount"></small></button>
         <button class="pill" id="thread" aria-label="Ветка целиком"><i data-i="message"></i><small id="threadCount"></small></button>
         <button class="pill icon-only" id="laterBtn" aria-label="Ответить позже"><i data-i="clock"></i></button>
         <span class="grow"></span>
@@ -89,6 +91,8 @@
         <button class="pill icon-only" id="close" aria-label="Закрыть"><i data-i="x"></i></button>
       </header>
       <div class="stage" id="recStage"><div class="disc"></div><canvas id="cv2"></canvas></div>
+      <p class="who big" id="recTime">0:00</p>
+      <div class="hair"><i id="recHairFill"></i></div>
       <p class="rec-text" id="recText"></p>
       <p class="rec-note" id="recNote"></p>
       <div class="rec-controls" id="recIdle">

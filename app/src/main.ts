@@ -1,10 +1,11 @@
 import { envelope, Player, Recorder } from "./audio";
 import {
   addReaction, blockAuthor, blockedAuthors, deleteRecording, findPost, hidePost, isHeard, isLater, laterIds,
-  loadFeed, markHeard, mostDiscussed, myPosts, myThreads, removeLater, repliesToMe, report,
+  loadFeed, markHeard, me, mostDiscussed, myPosts, myThreads, removeLater, repliesToMe, report,
   saveRecording, storedToPost, streams, toggleLater, unblockAuthor, unheardToMe, visible,
   type Moment, type Post, type ReportReason, type Stored, type Stream,
 } from "./feed";
+import { aura, auraGradient, hsl, paintAura } from "./aura";
 import { icon, paintIcons } from "./icons";
 import { MEMES, NAMES, playReaction, REACTIONS, type Reaction } from "./reactions";
 import {
@@ -187,10 +188,11 @@ function renderStories() {
     b.className = "story" + (seen.has(p.id) ? " seen" : "");
     b.setAttribute("aria-label", `${p.author}, ${p.replies.length} ${plural(p.replies.length, "ответ", "ответа", "ответов")}`);
     b.innerHTML = `<canvas></canvas>`;
+    b.style.setProperty("--ring", auraGradient(aura(p.author)));
     b.onclick = () => openStory(i);
     st.append(b);
     const cv = b.querySelector("canvas")!;
-    const draw = () => drawRing(cv, p.env, !seen.has(p.id));
+    const draw = () => drawRing(cv, p.env, seen.has(p.id) ? null : aura(p.author));
     draw();
     void ensureEnv(p).then(draw);
   });
@@ -269,8 +271,22 @@ async function playAt(i: number) {
   }
 }
 
+// направление смены записи: 1 — следующий голос снизу, -1 — предыдущий сверху
+let swapDir = 0;
+
 function show() {
   const { post: p, parent } = cur();
+  // аура говорящего: цвет за диском, дорожка времени; переход между аурами плавный (CSS @property)
+  const a = aura(p.author);
+  paintAura($("home"), a); // аура на весь экран: её видят и свечение, и волосок под диском
+  visual.setAura(a);
+  if (swapDir) {
+    const st = $("stage");
+    st.classList.remove("swap-next", "swap-prev");
+    void st.offsetWidth;
+    st.classList.add(swapDir > 0 ? "swap-next" : "swap-prev");
+    swapDir = 0;
+  }
   $("hook").textContent = p.hook;
   $("hook").classList.remove("open");
   $("transcript").textContent = p.text ?? "Расшифровка появится после обработки.";
@@ -292,6 +308,7 @@ function show() {
 }
 
 function next() {
+  swapDir = 1;
   if (mode.kind === "radio") return playAt(qi + 1); // радио не кончается: по кругу
   if (qi < items.length - 1) return playAt(qi + 1);
   if (mode.kind === "story" && mode.index < stories.length - 1) return openStory(mode.index + 1);
@@ -299,7 +316,9 @@ function next() {
 }
 
 function prev() {
+  swapDir = -1;
   if (player.el.currentTime > 2) {
+    swapDir = 0;
     player.el.currentTime = 0;
     return;
   }
@@ -336,13 +355,12 @@ player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && 
   visual.setProgress(el.ended ? 0 : prog);
   glow($("stage"), visual);
 
-  // внутри кольца только автор и время
+  // диск чистый: имя и волосок прогресса — под ним
   const { post: p, parent } = cur();
-  const title = parent ? `↳ ${p.author}` : p.author;
-  const left = d ? (d - el.currentTime) / rate : 0;
-  if (!started) visual.setReadout({ title, sub: "нажми, чтобы слушать" });
-  else if (!el.paused) visual.setReadout({ title, sub: clock(Math.ceil(left)) });
-  else visual.setReadout({ title, sub: "пауза" });
+  $("who").textContent = parent ? `↳ ${p.author}` : p.author;
+  $("hairFill").style.width = `${(el.ended ? 0 : prog) * 100}%`;
+  $("hair").setAttribute("aria-valuenow", String(Math.round(prog * 100)));
+  $("startBtn").hidden = started;
 })();
 
 // цвет за диском: размер — по кольцу, пульс — по громкости, вращение быстрее, когда говорят,
@@ -373,7 +391,7 @@ const progressNow = () => {
 // ответы — тёмный «↳» на своём моменте; реакции — «😂 8», группами по 6% записи
 function marksFor(p: Post, isRoot: boolean): Mark[] {
   const all: (Mark & { w: number })[] = [];
-  if (isRoot) for (const r of shown(p.replies)) if (r.at !== undefined) all.push({ at: r.at, kind: "reply", text: "↳", w: 100 });
+  if (isRoot) for (const r of shown(p.replies)) if (r.at !== undefined) all.push({ at: r.at, kind: "reply", text: "↳", aura: aura(r.author), w: 100 });
 
   const bins = new Map<number, Moment[]>();
   for (const m of p.moments) {
@@ -388,7 +406,7 @@ function marksFor(p: Post, isRoot: boolean): Mark[] {
     const topKey = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0];
     const top = isSoundKey(topKey) ? (soundByKey(topKey)?.icon ?? "🔊") : topKey;
     const at = list.reduce((a, m) => a + m.at, 0) / list.length;
-    all.push({ at, kind: "reaction", text: list.length > 1 ? `${top} ${list.length}` : top, w: list.length });
+    all.push({ at, kind: "reaction", text: top, count: list.length, w: list.length });
   }
 
   // не больше пяти меток и не теснее 7% круга: важные первыми
@@ -448,7 +466,38 @@ function float(r: string, big = false) {
   setTimeout(() => s.remove(), 1600);
 }
 
-$("heartBtn").onclick = () => react("❤️");
+// сердце: тап — ❤️, удержание (или правый клик) — веер остальных реакций
+let holdTimer = 0;
+let fanByHold = false;
+$("heartBtn").addEventListener("pointerdown", () => {
+  fanByHold = false;
+  holdTimer = window.setTimeout(() => {
+    fanByHold = true;
+    $("fan").hidden = false;
+  }, 420);
+});
+$("heartBtn").addEventListener("pointerleave", () => clearTimeout(holdTimer));
+$("heartBtn").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  $("fan").hidden = false;
+});
+$("heartBtn").onclick = () => {
+  clearTimeout(holdTimer);
+  if (fanByHold) return;
+  react("❤️");
+  // один раз подскажем, где остальные реакции
+  try {
+    if (!localStorage.getItem("sushhh.hintFan")) {
+      localStorage.setItem("sushhh.hintFan", "1");
+      setTimeout(() => toast("Удерживай ♡ — другие реакции"), 900);
+    }
+  } catch {
+    // без хранилища подсказка просто не покажется
+  }
+};
+$("heartBtn").onkeydown = (e) => {
+  if (e.key === "ArrowUp") (e.preventDefault(), ($("fan").hidden = false));
+};
 // веер: верхний ряд — эмоции, нижний — ситком-мемы
 const fanRow = (list: readonly Reaction[]) =>
   `<div class="fan-row">${list.map((r) => `<button data-r="${r}" aria-label="${NAMES[r]}" title="${NAMES[r]}"><span>${r}</span></button>`).join("")}</div>`;
@@ -470,7 +519,6 @@ const memeSet = new Set<string>(MEMES);
 function toastMeme(r: Reaction) {
   if (memeSet.has(r)) toast(NAMES[r]);
 }
-$("fanBtn").onclick = () => ($("fan").hidden = !$("fan").hidden);
 $("fan").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("[data-r], [data-s]");
   if (!b) return;
@@ -483,48 +531,47 @@ $("fan").addEventListener("click", (e) => {
   b.classList.add("pop");
 });
 document.addEventListener("pointerdown", (e) => {
-  if (!(e.target as HTMLElement).closest("#fan, #fanBtn")) $("fan").hidden = true;
+  if (!(e.target as HTMLElement).closest("#fan, #heartBtn")) $("fan").hidden = true;
 });
 
 // =================== жесты на кольце ===================
 // тап — пауза; двойной тап — сердце; свайп вверх/влево — дальше, вниз/вправо — назад;
 // палец на самом кольце — перемотка по кругу
 
-let down: { x: number; y: number; t: number; seek: boolean } | null = null;
+let down: { x: number; y: number; t: number } | null = null;
 let lastTap = 0;
 let tapTimer = 0;
 
-function ringAngle(e: PointerEvent) {
-  const r = $("stage").getBoundingClientRect();
-  const dx = e.clientX - (r.left + r.width / 2);
-  const dy = e.clientY - (r.top + r.height / 2);
-  const dist = Math.hypot(dx, dy);
-  const a = (Math.atan2(dy, dx) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
-  return { onRing: Math.abs(dist - visual.ringRadiusCss) < 26, frac: a / (Math.PI * 2) };
-}
-
 function seekTo(frac: number) {
   const d = player.el.duration;
-  if (d && isFinite(d)) player.el.currentTime = frac * d;
+  if (d && isFinite(d)) player.el.currentTime = Math.max(0, Math.min(1, frac)) * d;
 }
 
-$("stage").addEventListener("pointerdown", (e) => {
-  const { onRing, frac } = ringAngle(e);
-  const canSeek = onRing && !!player.el.getAttribute("src") && isFinite(player.el.duration);
-  down = { x: e.clientX, y: e.clientY, t: performance.now(), seek: canSeek };
-  if (canSeek) {
-    $("stage").setPointerCapture(e.pointerId);
-    seekTo(frac);
-  }
+// перемотка — касанием или протяжкой по волоску под именем
+function hairSeek(e: PointerEvent) {
+  const r = $("hair").getBoundingClientRect();
+  seekTo((e.clientX - r.left) / r.width);
+}
+$("hair").addEventListener("pointerdown", (e) => {
+  if (!player.el.getAttribute("src")) return;
+  $("hair").setPointerCapture(e.pointerId);
+  hairSeek(e);
 });
-$("stage").addEventListener("pointermove", (e) => {
-  if (down?.seek) seekTo(ringAngle(e).frac);
+$("hair").addEventListener("pointermove", (e) => $("hair").hasPointerCapture(e.pointerId) && hairSeek(e));
+$("hair").addEventListener("keydown", (e) => {
+  const d = player.el.duration;
+  if (!d || !isFinite(d)) return;
+  if (e.key === "ArrowRight") player.el.currentTime = Math.min(d, player.el.currentTime + 2);
+  if (e.key === "ArrowLeft") player.el.currentTime = Math.max(0, player.el.currentTime - 2);
+});
+
+$("stage").addEventListener("pointerdown", (e) => {
+  down = { x: e.clientX, y: e.clientY, t: performance.now() };
 });
 $("stage").addEventListener("pointerup", (e) => {
   if (!down) return;
-  const { x, y, t, seek } = down;
+  const { x, y, t } = down;
   down = null;
-  if (seek) return;
   const dx = e.clientX - x;
   const dy = e.clientY - y;
   if (Math.max(Math.abs(dx), Math.abs(dy)) > 50) {
@@ -547,6 +594,12 @@ $("stage").addEventListener("pointerup", (e) => {
 // =================== панель ===================
 
 $("thread").onclick = playThread;
+$("startBtn").onclick = (e) => {
+  e.stopPropagation();
+  void playAt(qi);
+};
+$("startBtn").addEventListener("pointerdown", (e) => e.stopPropagation());
+$("startBtn").addEventListener("pointerup", (e) => e.stopPropagation());
 $("laterBtn").onclick = () => {
   const on = toggleLater(cur().post.id);
   $("laterBtn").classList.toggle("on", on);
@@ -564,7 +617,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (!$("recorder").hidden || $("home").hidden) return;
-  if ((e.target as HTMLElement).closest("button, [role=button]") && (e.code === "Space" || e.code === "Enter")) return;
+  if ((e.target as HTMLElement).closest?.("button, [role=button]") && (e.code === "Space" || e.code === "Enter")) return;
   if (e.code === "Space") (e.preventDefault(), toggle());
   if (e.code === "ArrowRight" || e.code === "ArrowDown") void next();
   if (e.code === "ArrowLeft" || e.code === "ArrowUp") void prev();
@@ -779,8 +832,8 @@ function tile(p: Post, name: string, isNew: boolean, onOpen: () => void) {
   t.innerHTML = `<canvas></canvas><span>${escapeHtml(name)}</span>`;
   t.onclick = onOpen;
   const cv = t.querySelector("canvas")!;
-  queueMicrotask(() => drawRing(cv, p.env, true));
-  void ensureEnv(p).then(() => drawRing(cv, p.env, true));
+  queueMicrotask(() => drawRing(cv, p.env, aura(p.author)));
+  void ensureEnv(p).then(() => drawRing(cv, p.env, aura(p.author)));
   return t;
 }
 
@@ -981,6 +1034,9 @@ function openRecorder(to: Post | null, at?: number) {
   replyTo = to;
   replyAt = to ? at : undefined;
   maxMs = to ? REPLY_MS : POST_MS;
+  const mine = aura(me());
+  paintAura($("recStage"), mine);
+  recVisual.setAura(mine);
   $("recWhat").innerHTML = to ? `${icon("reply")}${escapeHtml(to.author)}` : `${icon("mic")}до ${POST_MS / 1000} с`;
   reset();
   $("recorder").hidden = false;
@@ -999,7 +1055,6 @@ function closeRecorder() {
 function reset() {
   preview.el.pause();
   take = null;
-  recVisual.setTracing(false);
   recVisual.setMarks([]);
   recVisual.setProgress(0);
   setRecState("idle");
@@ -1024,14 +1079,12 @@ function setRecState(s: "idle" | "live" | "done", note?: string) {
   setIcon($("listenBack"), "play");
 }
 
-// внутри кольца — время крупно; кольцо — время записи, голос рисует по нему след
+// под диском — время и волосок до лимита; диск остаётся чистым, голос виден в свечении
 function setTimer(ms: number) {
   const total = maxMs / 1000;
-  if (recState === "live") recVisual.setProgress(ms / maxMs);
   const sec = Math.min(total, Math.floor(ms / 1000));
-  if (recState === "live") recVisual.setReadout({ title: clock(sec), sub: total - sec <= 5 ? `ещё ${total - sec} с` : "", big: true });
-  else if (recState === "done") recVisual.setReadout({ title: clock(sec), big: true });
-  else recVisual.setReadout({ title: "0:00", big: true });
+  $("recTime").textContent = recState === "live" && total - sec <= 5 ? `${clock(sec)} · ещё ${total - sec} с` : clock(sec);
+  $("recHairFill").style.width = recState === "live" ? `${Math.min(1, ms / maxMs) * 100}%` : "0%";
 }
 
 async function startRec() {
@@ -1042,7 +1095,6 @@ async function startRec() {
     return;
   }
   setRecState("live");
-  recVisual.setTracing(true);
   transcript.start((t) => ($("recText").textContent = t));
   (function tick() {
     if (!recorder.active) return;
@@ -1056,7 +1108,6 @@ async function stopRec() {
   const dur = performance.now() - recorder.startedAt;
   transcript.stop();
   const blob = await recorder.stop();
-  recVisual.setTracing(false);
   recVisual.setProgress(0);
   if (dur < MIN_MS) {
     reset();
@@ -1101,7 +1152,7 @@ preview.el.addEventListener("pause", () => setIcon($("listenBack"), "play"));
 (function previewProgress() {
   if (!$("recorder").hidden) glow($("recStage"), recVisual);
   const d = preview.el.duration;
-  if (take && d && isFinite(d)) recVisual.setProgress(preview.el.ended ? 0 : preview.el.currentTime / d);
+  if (take && d && isFinite(d) && !preview.el.paused) $("recHairFill").style.width = `${(preview.el.currentTime / d) * 100}%`;
   requestAnimationFrame(previewProgress);
 })();
 
@@ -1152,6 +1203,13 @@ $("reply").onclick = () => {
 $("close").onclick = closeRecorder;
 
 // =================== старт ===================
+
+// моя аура — цвет кнопок, которыми говорю я: «ответить» и записать
+{
+  const mine = aura(me());
+  document.documentElement.style.setProperty("--me1", hsl(mine[0], 1, 72));
+  document.documentElement.style.setProperty("--me2", hsl(mine[1], 1, 76));
+}
 
 loadFeed().then((f) => {
   feed = f;

@@ -12,11 +12,11 @@ function setup(canvas: HTMLCanvasElement) {
   return { ctx, w, h, dpr };
 }
 
-// мини-превью записи: белый диск, а за ним цветные пятна там, где в записи громче —
-// у каждой записи свой «цветовой отпечаток». color = false — приглушённо (просмотрено)
-const UNI = ["#8fe6f2", "#b9a7f7", "#f5a8dc", "#a8efc8", "#f2e7a1"];
+import { hsl, type Aura } from "./aura";
 
-export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, color = false) {
+// мини-превью записи: белый диск, за ним пятна ауры автора — ярче там, где в записи громче.
+// a = null — приглушённо серым (просмотрено)
+export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | undefined, a: Aura | null) {
   const s = setup(canvas);
   if (!s) return;
   const { ctx, w, h } = s;
@@ -25,7 +25,8 @@ export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | und
   const R = Math.min(w, h) / 2;
 
   // энергия по пяти секторам записи
-  const n = UNI.length;
+  const n = 5;
+  const hues = a ? [a[0], a[1], a[2], a[0], a[1]] : [];
   const energy = new Array(n).fill(0.35);
   if (env?.length) {
     for (let k = 0; k < n; k++) {
@@ -43,9 +44,9 @@ export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | und
     const y = cy + Math.sin(a) * R * 0.42;
     const r = R * (0.45 + energy[k] * 0.55);
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const alpha = color ? 0.35 + energy[k] * 0.6 : 0.18;
-    g.addColorStop(0, hexA(color ? UNI[k] : "#a3b1c6", alpha));
-    g.addColorStop(1, hexA(color ? UNI[k] : "#a3b1c6", 0));
+    const alpha = a ? 0.4 + energy[k] * 0.55 : 0.18;
+    g.addColorStop(0, a ? hsl(hues[k], alpha, 74) : `rgba(163,177,198,${alpha})`);
+    g.addColorStop(1, a ? hsl(hues[k], 0, 74) : "rgba(163,177,198,0)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
   }
@@ -58,9 +59,4 @@ export function drawRing(canvas: HTMLCanvasElement, env: ArrayLike<number> | und
   ctx.beginPath();
   ctx.arc(cx, cy, R * 0.56, 0, Math.PI * 2);
   ctx.fill();
-}
-
-function hexA(hex: string, a: number) {
-  const v = parseInt(hex.slice(1), 16);
-  return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a})`;
 }

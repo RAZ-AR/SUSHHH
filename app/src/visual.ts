@@ -1,42 +1,25 @@
-// «Кольцо расхождения» (по мотивам Rehoboam): тишина — идеально ровный тонкий круг,
-// голос «распушает» линию там, где он звучит. Кольцо — время записи по часовой стрелке
-// от верха. Реакции и ответы — пузырьки на том моменте, к которому они относятся.
-// Неоморфизм «единорог»: прослушанное переливается пастелью по кругу,
-// «сейчас» — светящаяся мятная точка.
+// Диск голоса. Сам диск — чистый: ни текста, ни дорожки. Голос живёт в цветном свечении
+// за диском (CSS, --lv и --tone), имя и прогресс — под диском. Этот холст рисует только
+// метки вокруг края: реакции — эмодзи (чем больше их, тем крупнее), ответы — точки цвета
+// ауры того, кто ответил. Метки стоят на том моменте записи, к которому относятся.
+
+import { hsl, type Aura } from "./aura";
 
 export type Level = { level: number; tone: number };
 export type LevelSource = () => Level | null;
-// реакция — светлый пузырёк «😂 8», ответ — тёмный «↳»
-export type Mark = { at: number; kind: "reply" | "reaction"; text: string };
-// внутри кольца: главное (автор или время) и тихая подпись под ним
-export type Readout = { title?: string; sub?: string; big?: boolean };
+export type Mark = { at: number; kind: "reply" | "reaction"; text: string; count?: number; aura?: Aura };
 
 export const N = 40; // разрешение огибающей записи
-
-const INK = "79,93,117";
-const GREY = "163,177,198";
-const MINT = "#6bf2c8";
-const BG = "#e8edf4";
-const SANS = '"Nunito", -apple-system, "Helvetica Neue", Arial, sans-serif';
-// перелив по кругу: голубой → сирень → розовый → мята → лимон → снова голубой
-const UNI = ["#7fd8ea", "#a48cf2", "#ee8fcd", "#7fe0b0", "#e8d77a", "#7fd8ea"];
-
-function uniGradient(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
-  const g = ctx.createConicGradient(-Math.PI / 2, cx, cy);
-  UNI.forEach((c, i) => g.addColorStop(i / (UNI.length - 1), c));
-  return g;
-}
 
 export class Visual {
   private ctx: CanvasRenderingContext2D;
   private env = 0;
   private toneLv = 0.3;
   private source: LevelSource | null = null;
-  private tracing = false;
   private progress = 0;
   private marks: Mark[] = [];
   private flashes: { at: number; t0: number }[] = [];
-  private readout: Readout = {};
+  private aura: Aura = [190, 250, 320];
   private w = 0;
   private h = 0;
   private dpr = 1;
@@ -60,23 +43,13 @@ export class Visual {
     this.marks = m;
   }
 
-  // оранжевый импульс на моменте записи — отклик на только что поставленную реакцию
+  setAura(a: Aura) {
+    this.aura = a;
+  }
+
+  // мягкая вспышка у края — отклик на только что поставленную реакцию
   flash(at: number) {
     this.flashes.push({ at, t0: performance.now() });
-  }
-
-  // запись: голос сам «рисует» след по кольцу по мере хода времени
-  setTracing(on: boolean) {
-    this.tracing = on;
-  }
-
-  setReadout(r: Readout) {
-    this.readout = r;
-  }
-
-  // геометрия кольца в CSS-пикселях — для перемотки пальцем по кольцу
-  get ringRadiusCss() {
-    return (Math.min(this.w, this.h) * 0.31) / this.dpr;
   }
 
   get level() {
@@ -86,6 +59,11 @@ export class Visual {
   // тембр 0..1 — сдвигает оттенки свечения
   get tone() {
     return this.toneLv;
+  }
+
+  // радиус диска в CSS-пикселях — по нему CSS рисует диск и свечение
+  get ringRadiusCss() {
+    return (Math.min(this.w, this.h) * 0.31) / this.dpr;
   }
 
   private resize() {
@@ -99,151 +77,63 @@ export class Visual {
   private frame = (now: number) => {
     requestAnimationFrame(this.frame);
     if (!this.w || !this.h) return;
-    const ctx = this.ctx;
     const s = this.source?.() ?? null;
     const target = s ? s.level : 0;
     this.env += (target - this.env) * (target > this.env ? 0.45 : 0.1);
     this.toneLv += ((s?.tone ?? 0.3) - this.toneLv) * 0.08;
-    const p = this.progress;
 
-
+    const ctx = this.ctx;
+    const d = this.dpr;
     ctx.clearRect(0, 0, this.w, this.h);
     const cx = this.w / 2;
     const cy = this.h / 2;
     const R = Math.min(this.w, this.h) * 0.31;
-    const TAU = Math.PI * 2;
-    const pos = (a: number, r: number) => [cx + Math.cos(a * TAU - Math.PI / 2) * r, cy + Math.sin(a * TAU - Math.PI / 2) * r];
-    const live = !!s || this.tracing;
+    const pos = (a: number, r: number) => [
+      cx + Math.cos(a * Math.PI * 2 - Math.PI / 2) * r,
+      cy + Math.sin(a * Math.PI * 2 - Math.PI / 2) * r,
+    ];
 
-    // на диске нет волн: голос живёт в цветном свечении за диском (CSS, --lv и --tone).
-    // Здесь — только тонкая дорожка времени: пройденное переливом, остальное едва видно
-    const uni = uniGradient(ctx, cx, cy);
-    ctx.lineWidth = 1 * this.dpr;
-    ctx.strokeStyle = `rgba(${GREY},0.35)`;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, -Math.PI / 2 + p * TAU, -Math.PI / 2 + TAU);
-    ctx.stroke();
-    if (p > 0) {
-      ctx.lineWidth = 2.5 * this.dpr;
-      ctx.strokeStyle = uni;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + p * TAU);
-      ctx.stroke();
-    }
-
-    this.drawMarks(cx, cy, R, p, now, pos);
-
-    // «сейчас» — светящаяся мятная точка, как индикатор «вкл» в Soft GUI
-    if (p > 0 || live) {
-      const [nx, ny] = pos(p, R);
-      ctx.save();
-      ctx.shadowColor = MINT;
-      ctx.shadowBlur = 12 * this.dpr;
-      ctx.fillStyle = "#f6fffb";
-      ctx.beginPath();
-      ctx.arc(nx, ny, 5.5 * this.dpr, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = MINT;
-      ctx.beginPath();
-      ctx.arc(nx, ny, 3 * this.dpr, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    this.drawReadout(cx, cy, R);
-  };
-
-  private drawMarks(_cx: number, _cy: number, R: number, p: number, now: number, pos: (a: number, r: number) => number[]) {
-    const ctx = this.ctx;
-    const d = this.dpr;
-    const fs = 12 * d;
-    const h = 24 * d;
-    ctx.font = `700 ${fs}px ${SANS}`;
-    ctx.textBaseline = "middle";
     ctx.textAlign = "center";
-    this.flashes = this.flashes.filter((f) => now - f.t0 < 1400);
-
+    ctx.textBaseline = "middle";
     for (const m of this.marks) {
-      const passed = m.at <= p + 0.002;
-      const [x, y] = pos(m.at, R + 24 * d);
-      const w = Math.max(h, ctx.measureText(m.text).width + 16 * d);
-      // пузырёк не вылезает за края холста
-      const bx = Math.min(Math.max(x, w / 2 + 2 * d), this.w - w / 2 - 2 * d);
-      const by = Math.min(Math.max(y, h / 2 + 2 * d), this.h - h / 2 - 2 * d);
-      const reply = m.kind === "reply";
-      ctx.globalAlpha = passed ? 1 : 0.6;
-      // выпуклая таблетка: тёмная тень снизу-справа и светлая сверху-слева
-      ctx.save();
-      for (const [ox, oy, col] of [[2.5, 2.5, `rgba(${GREY},0.7)`], [-2, -2, "rgba(255,255,255,0.9)"]] as const) {
-        ctx.shadowColor = col;
-        ctx.shadowBlur = 5 * d;
-        ctx.shadowOffsetX = ox * d;
-        ctx.shadowOffsetY = oy * d;
-        ctx.fillStyle = BG;
-        ctx.beginPath();
-        ctx.roundRect(bx - w / 2, by - h / 2, w, h, h / 2);
-        ctx.fill();
-      }
-      ctx.restore();
-      if (reply) {
-        const g = ctx.createLinearGradient(bx - w / 2, by - h / 2, bx + w / 2, by + h / 2);
-        g.addColorStop(0, UNI[0]);
-        g.addColorStop(0.5, UNI[1]);
-        g.addColorStop(1, UNI[2]);
+      // ещё не прозвучавшие метки бледнее
+      ctx.globalAlpha = m.at <= this.progress + 0.002 ? 1 : 0.5;
+      if (m.kind === "reply") {
+        const a = m.aura ?? this.aura;
+        const [x, y] = pos(m.at, R + 14 * d);
+        const g = ctx.createLinearGradient(x - 7 * d, y - 7 * d, x + 7 * d, y + 7 * d);
+        g.addColorStop(0, hsl(a[0], 1, 66));
+        g.addColorStop(1, hsl(a[1], 1, 70));
+        ctx.save();
+        ctx.shadowColor = hsl(a[0], 0.6, 66);
+        ctx.shadowBlur = 8 * d;
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.roundRect(bx - w / 2, by - h / 2, w, h, h / 2);
+        ctx.arc(x, y, 6 * d, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 1.5 * d;
+        ctx.stroke();
+      } else {
+        // популярность — размером, а не цифрой
+        const size = (15 + Math.min(m.count ?? 1, 12) * 1.2) * d;
+        const [x, y] = pos(m.at, R + size * 0.75);
+        ctx.font = `${size}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+        ctx.fillText(m.text, Math.min(Math.max(x, size), this.w - size), Math.min(Math.max(y, size), this.h - size));
       }
-      ctx.fillStyle = reply ? "#ffffff" : `rgb(${INK})`;
-      ctx.fillText(m.text, bx, by + 0.5 * d);
-      // точка на самом кольце
-      const [rx, ry] = pos(m.at, R);
-      ctx.fillStyle = `rgb(${INK})`;
-      ctx.beginPath();
-      ctx.arc(rx, ry, 1.8 * d, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
     }
-    ctx.textAlign = "left";
+    ctx.globalAlpha = 1;
 
+    this.flashes = this.flashes.filter((f) => now - f.t0 < 1200);
     for (const f of this.flashes) {
-      const k = (now - f.t0) / 1400;
+      const k = (now - f.t0) / 1200;
       const [fx, fy] = pos(f.at, R);
-      ctx.strokeStyle = MINT;
-      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = hsl(this.aura[0], 1 - k, 66);
       ctx.lineWidth = 1.5 * d;
       ctx.beginPath();
       ctx.arc(fx, fy, (4 + k * 22) * d, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.globalAlpha = 1;
     }
-  }
-
-  private drawReadout(cx: number, cy: number, _R: number) {
-    const ctx = this.ctx;
-    const { title, sub, big } = this.readout;
-    const d = this.dpr;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const ts = (big ? 40 : 18) * d;
-    if (title) {
-      ctx.font = `${big ? 700 : 800} ${ts}px ${SANS}`;
-      ctx.fillStyle = `rgb(${INK})`;
-      ctx.fillText(fit(ctx, title, _R * 1.5), cx, sub ? cy - ts * 0.35 : cy);
-    }
-    if (sub) {
-      ctx.font = `700 ${13 * d}px ${SANS}`;
-      ctx.fillStyle = "#97b6ca";
-      ctx.fillText(fit(ctx, sub, _R * 1.5), cx, cy + (title ? ts * 0.6 : 0));
-    }
-    ctx.textAlign = "left";
-  }
-}
-
-function fit(ctx: CanvasRenderingContext2D, s: string, room: number) {
-  if (ctx.measureText(s).width <= room) return s;
-  let t = s;
-  while (t.length > 1 && ctx.measureText(t + "…").width > room) t = t.slice(0, -1);
-  return t + "…";
+  };
 }
