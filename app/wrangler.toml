@@ -1,0 +1,5 @@
+# Cloudflare Pages: собирается из папки app (Root directory = app в настройках проекта).
+# Команда сборки — npm run build, результат — dist.
+name = "sushhh"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-10-01"

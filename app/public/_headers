@@ -1,0 +1,13 @@
+# Заголовки для Cloudflare Pages
+/*
+  Permissions-Policy: microphone=(self), camera=(), geolocation=()
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+
+# сборка с хешами в именах — можно кэшировать навсегда
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# демо-голоса меняются редко
+/seed/*
+  Cache-Control: public, max-age=604800
