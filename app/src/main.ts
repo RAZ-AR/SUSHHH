@@ -6,8 +6,10 @@ import {
   type Moment, type Post, type ReportReason, type Stored, type Stream,
 } from "./feed";
 import { aura, auraGradient, hsl, paintAura } from "./aura";
-import { LANGS, lang, setLang, t, tn, translateDom } from "./i18n";
+import { ago, LANGS, lang, setLang, t, tn, translateDom } from "./i18n";
 import { icon, paintIcons } from "./icons";
+import { look, LOOKS, setLook } from "./look";
+import { Cell } from "./cell";
 import { MEMES, playReaction, REACTIONS, type Reaction } from "./reactions";
 import {
   allowsWithoutAsking, authorAllows, countUse, createSound, durationOf, isSoundKey, liveSounds, MAX_DUR, mySounds,
@@ -20,6 +22,8 @@ import { N, Visual, type Mark } from "./visual";
 
 paintIcons();
 translateDom();
+// вид «плитка»: в каждом питомце живёт клетка на холсте
+document.querySelectorAll<HTMLElement>(".orb").forEach((orb) => new Cell(orb, () => look === "tile"));
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -303,6 +307,13 @@ function show() {
   $("segments").innerHTML =
     mode.kind === "radio" ? "" : items.map((_, i) => `<span class="seg${i < qi ? " done" : i === qi ? " now" : ""}"><i></i></span>`).join("");
   $("fan").hidden = true;
+  // вид «плитка»: подпись на питомце (тег или «когда») и точки очереди — до пяти вокруг текущей
+  $("orbTag").textContent = p.tags[0] ?? ago(p.createdAt);
+  const from = Math.max(0, Math.min(qi - 2, items.length - 5));
+  $("dots").innerHTML = items
+    .slice(from, from + 5)
+    .map((_, i) => `<i class="${from + i === qi ? "now" : ""}"></i>`)
+    .join("");
 }
 
 function next() {
@@ -359,6 +370,8 @@ player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && 
   $("hairFill").style.width = `${(el.ended ? 0 : prog) * 100}%`;
   $("hair").setAttribute("aria-valuenow", String(Math.round(prog * 100)));
   $("startBtn").hidden = started;
+  const time = clock(el.ended ? 0 : el.currentTime);
+  if ($("clock").textContent !== time) $("clock").textContent = time;
   // персонаж «говорит», пока звучит голос; на паузе и до старта — спит
   $("orb").classList.toggle("sleep", !started || el.paused);
 })();
@@ -1097,6 +1110,12 @@ function renderProfile() {
       rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
       player.el.playbackRate = rate;
       renderProfile();
+    }),
+    meRow("rotate", `${t("look")} · ${t(`look.${look}`)}`, () => {
+      setLook(LOOKS[(LOOKS.indexOf(look) + 1) % LOOKS.length]);
+      renderProfile();
+      renderMine();
+      renderStories();
     }),
     meSwitch(t("allowNoAsk"), allowsWithoutAsking(), () => {
       setAllowWithoutAsking(!allowsWithoutAsking());
