@@ -1225,496 +1225,170 @@ button:focus-visible, [role="button"]:focus-visible { outline-color: var(--warm)
 .me-list .sheet-row.danger { background: rgba(255, 255, 255, 0.28); }
 .me-list > .sheet-row.danger:nth-last-child(2) { margin-top: 14px; }
 
-/* вид «плитка»: элементы, которых нет в «мягком свете» */
-.clock, .dots, .orb-tag { display: none; }
+/* док — обёртка «сейчас звучит»; в «мягком свете» не влияет на раскладку */
+.dock { display: contents; }
+canvas.field { display: none; }
 
 /* =====================================================================
-   Вид «Стеклянная плитка» — по референсу экрана блокировки:
-   светло-серая сетка, много воздуха, один маленький свет в верхней трети.
-   Плитка-питомец ≈ четверть ширины, за ней плотная аура: голубой сверху,
-   зелёный слева, розовый справа, цвет автора снизу. Имя — широкие капители
-   с огромной разрядкой, под ним серая строка, ниже строка значков, время,
-   две точки и узкая группа «Эфир ▪ Моё» внизу.
+   Вид «Боке». Голос — облако цветных точек во весь экран (bokeh.ts) на
+   бледно-лавандовом фоне. Интерфейс — только жидкое стекло поверх облака:
+   стеклу нужно что преломлять, и пёстрые точки дают ему это.
+   Сверху — стеклянная таблетка канала и «⋯». Всё поле — касание: пауза/звук,
+   свайп вверх/вниз — другой голос. Внизу — док жидкого стекла: автор и хук,
+   волосок прогресса по верхнему краю, ряд действий и «Ответить» в моём цвете;
+   под ним — вторая стеклянная капсула навигации.
    ===================================================================== */
-html[data-look="tile"] {
-  --ink: #1d1d22;
-  --icon: #5b5b63;
-  --mute: #8e8e96;
-  --label: #8e8e96;
-  --warm: #8b6cf0;
-  --warm-2: #c4a8ff;
-  --wide: "Unbounded", "Onest", system-ui, sans-serif;
-  --mesh:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.035) 1px, transparent 1px) 0 0 / 3px 3px,
-    linear-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px) 0 0 / 3px 3px,
-    #e7e7e8;
-  background: var(--mesh);
+html[data-look="bokeh"] {
+  --ink: #17171f;
+  --icon: #3f3f4c;
+  --mute: #6f6f7e;
+  --label: #6f6f7e;
+  --bg-lav: #eef0fa;
+  /* жидкое стекло: светлое, прозрачное, с ярким бликом сверху и тонкой кромкой */
+  --lg-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.2));
+  --lg-blur: blur(22px) saturate(180%) brightness(1.04);
+  --lg-edge: inset 0 1px 0.5px rgba(255, 255, 255, 0.95), inset 0 -1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 0 0 0.6px rgba(255, 255, 255, 0.55);
+  --lg-lift: 0 14px 34px -14px rgba(40, 36, 90, 0.28), 0 2px 6px rgba(40, 36, 90, 0.06);
+  background: var(--bg-lav);
 }
-html[data-look="tile"] body::before, html[data-look="tile"] body::after { display: none; }
+html[data-look="bokeh"] body::before, html[data-look="bokeh"] body::after { display: none; }
+html[data-look="bokeh"] canvas.field { display: block; position: fixed; inset: 0; width: 100vw; height: 100dvh; z-index: 0; pointer-events: none; }
 
-/* ---------- эфир: колонка с воздухом ---------- */
-html[data-look="tile"] #home { padding-top: max(18px, env(safe-area-inset-top)); }
-html[data-look="tile"] #home .top { justify-content: center; position: relative; }
-html[data-look="tile"] #home .top .chan {
-  height: 28px;
-  padding: 0 4px;
-  gap: 6px;
-  background: none;
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+/* общий материал — жидкое стекло */
+html[data-look="bokeh"] :is(.pill, .tabbar, .dock, .sheet, .toast, .fan, .sheet-row, .snd-row, .blocked-row, .rec-btn, .me-stat, .me-list .switch-row, .start) {
+  background: var(--lg-fill);
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+  box-shadow: var(--lg-edge), var(--lg-lift);
   color: var(--ink);
 }
-html[data-look="tile"] #home .top .chan .ico { width: 12px; height: 12px; }
-html[data-look="tile"] #moreBtn { position: absolute; right: 0; top: 0; width: 36px; height: 28px; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-html[data-look="tile"] #moreBtn .ico { width: 16px; height: 16px; color: var(--mute); }
-html[data-look="tile"] .pill::before { display: none; }
-html[data-look="tile"] #home .stories { display: none; }
+html[data-look="bokeh"] :is(.pill, .tabbar, .sheet-row, .toast, .fan, .snd-row, .blocked-row, .rec-btn)::before {
+  background: radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, 0.7), transparent 60%);
+}
+html[data-look="bokeh"] .pill .ico, html[data-look="bokeh"] .tab .ico { stroke: var(--ink); }
+html[data-look="bokeh"] .pill.on, html[data-look="bokeh"] .pill:active:not(.dark) { background: rgba(255, 255, 255, 0.78); }
 
-html[data-look="tile"] #home .stage { flex: none; height: 40dvh; min-height: 250px; }
-html[data-look="tile"] #home .who { margin-top: 1dvh; }
-html[data-look="tile"] #home .hair { display: none; }
+/* ---------- эфир: облако — главное, текст — только в доке ---------- */
+html[data-look="bokeh"] #home .stories { display: none; }
+html[data-look="bokeh"] .orb, html[data-look="bokeh"] #cv, html[data-look="bokeh"] .stage::before, html[data-look="bokeh"] .stage::after { display: none; }
+html[data-look="bokeh"] #home .stage { flex: 1 1 0; }
 
-/* имя — как «SUNDAY»: широкие капители, разрядка почти в букву */
-html[data-look="tile"] .who {
-  font-family: var(--wide);
-  font-size: 15px;
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.62em;
-  margin-right: -0.62em;
-  color: var(--ink);
-  white-space: nowrap;
-}
-/* хук — как «BROKEN CLOUDS»: мельче, серый, тоже разреженный */
-html[data-look="tile"] .hook {
-  margin-top: 8px;
-  font-family: var(--wide);
-  font-size: 8.5px;
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.42em;
-  color: var(--icon);
-  padding: 0 8px;
-}
-html[data-look="tile"] .hook.open { font-family: var(--sans); text-transform: none; letter-spacing: 0; font-size: 14px; white-space: normal; }
-
-/* действия — как строка погоды: маленький цветной значок и число, без подложек */
-html[data-look="tile"] .actions { justify-content: center; gap: 22px; margin-top: 5dvh; padding: 0; }
-html[data-look="tile"] .actions .grow { display: none; }
-html[data-look="tile"] .actions .pill,
-html[data-look="tile"] .actions .pill.dark,
-html[data-look="tile"] .actions .pill.on {
-  width: auto;
-  min-width: 0;
-  height: 32px;
-  padding: 0 2px;
-  gap: 5px;
-  background: none;
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  border-radius: 8px;
-}
-html[data-look="tile"] .actions .ico { width: 16px; height: 16px; }
-html[data-look="tile"] .actions small { font-size: 12px; font-weight: 500; color: var(--ink); }
-html[data-look="tile"] #heartBtn .ico { color: #f07aa8; stroke: #f07aa8; }
-html[data-look="tile"] #heartBtn.liked .ico { fill: #f07aa8; }
-html[data-look="tile"] #thread .ico { color: #5fb6ea; stroke: #5fb6ea; }
-html[data-look="tile"] #laterBtn .ico { color: #8b6cf0; stroke: #8b6cf0; }
-html[data-look="tile"] #laterBtn.on .ico { fill: rgba(139, 108, 240, 0.25); }
-html[data-look="tile"] #reply .ico { color: #4fc99a; stroke: #4fc99a; }
-
-/* время — как «12:18 PM»; точки очереди — как страницы ○◉ */
-html[data-look="tile"] .clock {
-  display: block;
-  margin: 7dvh 0 0;
-  text-align: center;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-html[data-look="tile"] .dots { display: flex; justify-content: center; gap: 4px; margin-top: 6dvh; }
-html[data-look="tile"] .dots i { width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--ink); }
-html[data-look="tile"] .dots i.now { background: radial-gradient(circle, var(--ink) 1.6px, transparent 2px); }
-
-/* ---------- таббар: узкая группа по центру ---------- */
-html[data-look="tile"] .tabbar {
-  align-self: center;
-  width: 210px;
-  margin-top: auto;
-  padding: 0;
-  gap: 0;
-  background: none;
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-html[data-look="tile"] .tabbar::before { display: none; }
-html[data-look="tile"] .tab,
-html[data-look="tile"] .tab.on { height: 44px; background: none; box-shadow: none; color: var(--mute); }
-html[data-look="tile"] .tab.on { color: var(--ink); }
-html[data-look="tile"] .tab .ico { display: none; }
-html[data-look="tile"] .tab::after,
-html[data-look="tile"] .tab.on::after {
-  content: attr(aria-label);
-  position: static;
-  width: auto;
-  height: auto;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  font-family: var(--wide);
-  font-size: 8.5px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.3em;
-  margin-right: -0.3em;
-}
-/* «записать» — плитка из четырёх цветных квадратиков */
-html[data-look="tile"] .tab[data-rec] { flex: 0 0 44px; }
-html[data-look="tile"] .tab[data-rec]::after {
-  content: "";
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  border-radius: 0;
-  background:
-    linear-gradient(#5fb6ea, #5fb6ea) 0 0 / 8px 8px no-repeat,
-    linear-gradient(#f07ac8, #f07ac8) 100% 0 / 8px 8px no-repeat,
-    linear-gradient(#8b6cf0, #8b6cf0) 0 100% / 8px 8px no-repeat,
-    linear-gradient(#7fe0b4, #7fe0b4) 100% 100% / 8px 8px no-repeat;
-}
-html[data-look="tile"] .tab[data-rec]:active::after { scale: 0.85; }
-html[data-look="tile"] .badge { top: 6px; left: calc(50% + 24px); min-width: 14px; height: 14px; font-size: 9px; padding: 0 4px; background: var(--warm); box-shadow: none; }
-
-/* ---------- питомец: маленькая матовая плитка ---------- */
-html[data-look="tile"] .orb {
-  width: calc(var(--r) * 1.1);
-  height: calc(var(--r) * 1.1);
-  border-radius: 26%;
-  overflow: hidden;
-  background:
-    radial-gradient(110% 80% at 50% 100%, oklch(0.6 0.19 var(--h) / 0.3), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.22));
-  -webkit-backdrop-filter: blur(14px) saturate(1.6);
-  backdrop-filter: blur(14px) saturate(1.6);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55),
-    inset 0 1px 1px rgba(255, 255, 255, 0.9),
-    0 10px 24px -14px rgba(30, 30, 50, 0.35);
-}
-html[data-look="tile"] .orb::after { border-radius: inherit; opacity: 0.18; }
-html[data-look="tile"] .orb-rim {
-  inset: 30% 18% 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 70%, oklch(0.6 0.2 var(--h) / 0.45), transparent 70%);
-  filter: blur(calc(var(--r) * 0.1));
-  opacity: calc(0.35 + var(--lv) * 0.65);
-  scale: calc(0.85 + var(--lv) * 0.3);
-  animation: none;
-}
-html[data-look="tile"] .orb-rim::after { display: none; }
-/* подпись над глазами — как «APR»: тег записи; на паузе — ▶ */
-html[data-look="tile"] .orb-tag {
-  display: block;
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 22%;
-  text-align: center;
-  font-family: var(--wide);
-  font-size: calc(var(--r) * 0.075);
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.35em;
-  margin-right: -0.35em;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  z-index: 1;
-}
-html[data-look="tile"] .orb.sleep .orb-tag::before { content: "▶  "; letter-spacing: 0; }
-/* глаза — как «19»: крупные, тёмные, плотные */
-html[data-look="tile"] .eyes { top: 58%; gap: calc(var(--r) * 0.13); }
-html[data-look="tile"] .eyes i { width: calc(var(--r) * 0.09); height: calc(var(--r) * 0.26); background: var(--ink); }
-html[data-look="tile"] .orb.sleep .eyes i { width: calc(var(--r) * 0.16); height: calc(var(--r) * 0.07); background: transparent; border-color: var(--ink); border-bottom-width: max(2px, calc(var(--r) * 0.028)); }
-html[data-look="tile"] .orb.happy .eyes i { background: transparent; border-top-color: var(--ink); width: calc(var(--r) * 0.2); }
-html[data-look="tile"] .orb.listen .eyes { translate: -50% calc(-50% - var(--r) * 0.04); }
-
-/* аура: плотная, у самого края плитки, схема референса — голубой сверху, розовый
-   справа, фиолетовый снизу, зелёный слева. Цвет автора — свечение снизу и внутри */
-html[data-look="tile"] .stage::before {
-  translate: 0 0;
-  width: calc(var(--r) * 1.85);
-  height: calc(var(--r) * 1.85);
-  border-radius: 34%;
-  background: conic-gradient(#5fd0f2, #f27ad2 25%, #8a62f0 50%, #62e3a4 75%, #5fd0f2);
-  filter: blur(calc(var(--r) * 0.17)) saturate(1.2);
-  opacity: calc(0.82 + var(--lv) * 0.18);
-  transform: translate(-50%, -50%) scale(calc(0.92 + var(--lv) * 0.3));
-}
-html[data-look="tile"] .stage::after {
-  width: calc(var(--r) * 1.2);
-  height: calc(var(--r) * 0.9);
-  background: radial-gradient(circle, oklch(0.62 0.2 var(--h)), transparent 70%);
-  filter: blur(calc(var(--r) * 0.16));
-  opacity: calc(0.4 + var(--lv) * 0.5);
-  transform: translate(-50%, -20%) scale(calc(0.9 + var(--lv) * 0.4));
-  mix-blend-mode: normal;
-}
-/* «слушать» — вся плитка: касание будит питомца */
-html[data-look="tile"] .start {
+/* «слушать» до первого касания — стеклянная линза в центре облака */
+html[data-look="bokeh"] .start {
   top: 50%;
   left: 50%;
-  width: calc(var(--r) * 1.1);
-  height: calc(var(--r) * 1.1);
+  width: 84px;
+  height: 84px;
   margin: 0;
   translate: -50% -50%;
-  border-radius: 26%;
-  background: none;
-  box-shadow: none;
-  animation: none;
-}
-html[data-look="tile"] .start .ico { display: none; }
-html[data-look="tile"] .start:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
-
-/* ---------- запись ---------- */
-html[data-look="tile"] .recorder { background: var(--mesh); -webkit-backdrop-filter: none; backdrop-filter: none; }
-html[data-look="tile"] .recorder::before { display: none; }
-html[data-look="tile"] .recorder .stage { flex: none; height: 42dvh; }
-html[data-look="tile"] .who.big { font-family: var(--wide); font-size: 22px; font-weight: 300; letter-spacing: 0.3em; margin-right: -0.3em; }
-html[data-look="tile"] .recorder .hair { width: 90px; }
-html[data-look="tile"] .recorder .hair::before { height: 1px; background: rgba(0, 0, 0, 0.15); }
-html[data-look="tile"] .recorder .hair i { height: 1px; background: var(--ink); }
-html[data-look="tile"] .rec-btn { background: rgba(255, 255, 255, 0.6); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8); -webkit-backdrop-filter: none; backdrop-filter: none; }
-html[data-look="tile"] .rec-btn .ico { stroke: #4fc99a; }
-html[data-look="tile"] .pill.dark { color: var(--ink); background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 0 0 1px #fff; }
-html[data-look="tile"] .pill.dark .ico { stroke: var(--ink); }
-html[data-look="tile"] .recorder .pill, html[data-look="tile"] .recorder .pill::before { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-html[data-look="tile"] #recWhat { font-family: var(--wide); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; }
-
-/* ---------- «Моё» и кабинет: та же сетка, плитки вместо кругов ---------- */
-html[data-look="tile"] .me-head span,
-html[data-look="tile"] .tile span { font-family: var(--wide); text-transform: uppercase; letter-spacing: 0.3em; font-size: 9px; font-weight: 400; color: var(--ink); }
-html[data-look="tile"] .me-head span { font-size: 11px; }
-html[data-look="tile"] .big-play,
-html[data-look="tile"] .big-play.dark,
-html[data-look="tile"] .big-play.quiet {
-  height: 48px;
-  border-radius: 14px;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  font-family: var(--wide);
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-html[data-look="tile"] .big-play .ico { stroke: #8b6cf0; fill: #8b6cf0; width: 14px; height: 14px; }
-html[data-look="tile"] .seg-tabs .pill { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-html[data-look="tile"] .seg-tabs .pill.on { background: rgba(255, 255, 255, 0.7); box-shadow: inset 0 0 0 1px #fff; }
-html[data-look="tile"] .tile.new::after { background: var(--warm); box-shadow: none; width: 7px; height: 7px; }
-html[data-look="tile"] .me-stat,
-html[data-look="tile"] .me-list .sheet-row,
-html[data-look="tile"] .me-list .switch-row {
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  border-radius: 14px;
-}
-html[data-look="tile"] .me-list .sheet-row::before { display: none; }
-html[data-look="tile"] .me-stage { --r: 82px; }
-html[data-look="tile"] .me-view .who { font-size: 14px; }
-html[data-look="tile"] .me-rename { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-html[data-look="tile"] .switch.on { background: var(--ink); }
-html[data-look="tile"] .seg.done, html[data-look="tile"] .seg.now { background: var(--ink); box-shadow: none; }
-html[data-look="tile"] .sheet { background: rgba(240, 240, 241, 0.9); }
-html[data-look="tile"] .sheet-row.on, html[data-look="tile"] .sheet-row:active { background: #fff; color: var(--ink); }
-
-/* =====================================================================
-   Питомец в виде «плитка» — живая клетка по референсу (видео, петля 23 с):
-   снаружи бирюзовый ореол со смещением вправо-вниз и чётким внешним краем,
-   слева — рассеянная персиковая дымка; тело — фиолетовое снизу-слева и синее
-   справа; между красным и синим — тёмная тень; горячее красное ядро сдвинуто
-   влево-вверх; поверх — две тонкие белые контурные петли. Форма всё время
-   перетекает и медленно поворачивается, слои плывут друг относительно друга.
-   Голос: ядро разгорается, ореол раздувается, тело дышит.
-   ===================================================================== */
-html[data-look="tile"] .orb {
-  width: calc(var(--r) * 1.5);
-  height: calc(var(--r) * 1.5);
   border-radius: 50%;
-  overflow: visible;
-  background: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: none;
-  scale: calc(1 + var(--lv) * 0.1);
   animation: none;
 }
-/* тело: слои цвета, размытые, форма-амёба */
-html[data-look="tile"] .orb::before {
+html[data-look="bokeh"] .start .ico { width: 30px; height: 30px; margin-left: 4px; stroke: var(--ink); }
+html[data-look="bokeh"] .start .ico.fill { fill: var(--ink); stroke: none; }
+
+/* док жидкого стекла */
+html[data-look="bokeh"] .dock {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  margin: 0 -4px;
+  padding: 16px 16px 10px 20px;
+  border-radius: 30px;
+  isolation: isolate;
+}
+html[data-look="bokeh"] .dock::before {
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(40% 38% at 40% 42%, #f03a1e 0%, rgba(240, 58, 30, 0.95) 45%, rgba(240, 58, 30, 0) 100%),
-    radial-gradient(30% 28% at 64% 34%, rgba(30, 4, 22, 0.95) 0%, rgba(30, 4, 22, 0.6) 45%, rgba(30, 4, 22, 0) 100%),
-    radial-gradient(40% 46% at 70% 54%, #3438e0 0%, rgba(52, 56, 224, 0.8) 45%, rgba(52, 56, 224, 0) 100%),
-    radial-gradient(48% 40% at 40% 70%, #8a48ea 0%, rgba(138, 72, 234, 0.75) 50%, rgba(138, 72, 234, 0) 100%),
-    radial-gradient(closest-side, rgba(244, 160, 150, 0.8) 60%, rgba(244, 160, 150, 0) 100%);
-  border-radius: 58% 42% 50% 50% / 46% 56% 44% 54%;
-  filter: blur(calc(var(--r) * 0.1)) saturate(1.1);
-  animation: cell-a 11s ease-in-out infinite alternate, cell-turn 23s linear infinite;
-}
-/* горячее ядро: плывёт внутри тела и разгорается с голосом */
-html[data-look="tile"] .orb-rim {
-  inset: 18% 32% 32% 14%;
-  border-radius: 50% 44% 56% 48% / 48% 52% 46% 54%;
-  background: radial-gradient(closest-side, #ff4a26 0%, rgba(250, 64, 34, 0.9) 50%, rgba(250, 64, 34, 0) 100%);
-  filter: blur(calc(var(--r) * 0.06));
-  opacity: calc(0.55 + var(--lv) * 0.45);
-  scale: calc(0.85 + var(--lv) * 0.4);
-  -webkit-mask: none;
-  mask: none;
-  animation: core-drift 9s ease-in-out infinite alternate;
-}
-html[data-look="tile"] .orb-rim::after { display: none; }
-/* две белые контурные петли — как изолинии; без размытия */
-html[data-look="tile"] .orb::after,
-html[data-look="tile"] .orb-tag {
-  content: "";
-  display: block;
-  position: absolute;
-  inset: 10% 6% 12% 14%;
-  top: 10%;
-  left: 14%;
-  right: 6%;
-  width: auto;
-  height: auto;
-  margin: 0;
-  padding: 0;
-  font-size: 0;
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  border-radius: 38% 62% 44% 56% / 58% 40% 60% 42%;
-  opacity: 0.9;
-  mix-blend-mode: normal;
-  filter: none;
-  rotate: 0deg;
-  animation: cell-b 13s ease-in-out infinite alternate, cell-turn 23s linear infinite reverse;
-}
-html[data-look="tile"] .orb-tag {
-  inset: 16% 12% 6% 10%;
-  top: 16%;
-  left: 10%;
-  right: 12%;
-  border-color: rgba(255, 255, 255, 0.45);
-  border-radius: 60% 40% 62% 38% / 42% 60% 40% 58%;
-  animation: cell-c 7.5s ease-in-out infinite alternate, cell-turn 31s linear infinite;
-}
-html[data-look="tile"] .orb.sleep .orb-tag::before { content: none; }
-
-/* глаза — белые, светятся на красном ядре */
-html[data-look="tile"] .eyes { top: 46%; left: 47%; gap: calc(var(--r) * 0.15); z-index: 2; }
-html[data-look="tile"] .eyes i {
-  width: calc(var(--r) * 0.085);
-  height: calc(var(--r) * 0.22);
-  background: #fff;
-  box-shadow: 0 0 calc(var(--r) * 0.06) rgba(255, 255, 255, 0.8);
-}
-html[data-look="tile"] .orb.sleep .eyes i { background: transparent; border-color: #fff; box-shadow: none; }
-html[data-look="tile"] .orb.happy .eyes i { background: transparent; border-top-color: #fff; box-shadow: none; }
-
-/* ореолы: бирюзовый с чётким краем справа-снизу, персиковая дымка слева */
-html[data-look="tile"] .stage::before {
-  translate: 0 0;
-  width: calc(var(--r) * 1.95);
-  height: calc(var(--r) * 1.85);
-  border-radius: 46% 54% 60% 40% / 50% 46% 54% 50%;
-  background: radial-gradient(closest-side at 46% 48%, rgba(96, 222, 232, 0.35) 30%, rgba(96, 222, 232, 0.92) 76%, rgba(130, 232, 240, 0.95) 95%, rgba(130, 232, 240, 0) 100%);
-  -webkit-mask: linear-gradient(120deg, transparent 14%, rgba(0, 0, 0, 0.6) 40%, #000 62%);
-  mask: linear-gradient(120deg, transparent 14%, rgba(0, 0, 0, 0.6) 40%, #000 62%);
-  filter: blur(1.5px);
-  opacity: calc(0.85 + var(--lv) * 0.15);
-  transform: translate(-44%, -46%) scale(calc(0.94 + var(--lv) * 0.22));
-  animation: halo-morph 13s ease-in-out infinite alternate;
-}
-html[data-look="tile"] .stage::after {
-  width: calc(var(--r) * 2.2);
-  height: calc(var(--r) * 2);
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(246, 156, 132, 0.9) 45%, rgba(246, 156, 132, 0) 100%);
-  filter: blur(calc(var(--r) * 0.12));
-  opacity: calc(0.7 + var(--lv) * 0.3);
-  transform: translate(-58%, -50%) scale(calc(0.95 + var(--lv) * 0.25));
-  mix-blend-mode: normal;
-}
-html[data-look="tile"] .start { width: calc(var(--r) * 1.5); height: calc(var(--r) * 1.5); border-radius: 50%; }
-
-@keyframes cell-a {
-  0% { border-radius: 58% 42% 50% 50% / 46% 56% 44% 54%; }
-  33% { border-radius: 44% 56% 62% 38% / 56% 42% 58% 44%; }
-  66% { border-radius: 52% 48% 38% 62% / 40% 54% 46% 60%; }
-  100% { border-radius: 40% 60% 54% 46% / 60% 46% 54% 40%; }
-}
-@keyframes cell-b {
-  0% { border-radius: 38% 62% 44% 56% / 58% 40% 60% 42%; }
-  50% { border-radius: 62% 38% 58% 42% / 40% 62% 38% 60%; }
-  100% { border-radius: 44% 56% 36% 64% / 62% 44% 56% 38%; }
-}
-@keyframes cell-c {
-  0% { border-radius: 60% 40% 62% 38% / 42% 60% 40% 58%; }
-  100% { border-radius: 40% 60% 42% 58% / 60% 38% 62% 40%; }
-}
-@keyframes cell-turn { to { rotate: 360deg; } }
-@keyframes core-drift {
-  0% { translate: 0 0; border-radius: 50% 44% 56% 48% / 48% 52% 46% 54%; }
-  50% { translate: 6% -4%; border-radius: 42% 58% 48% 52% / 56% 44% 54% 46%; }
-  100% { translate: -4% 5%; border-radius: 56% 44% 44% 56% / 46% 56% 44% 54%; }
-}
-@keyframes halo-morph {
-  0% { border-radius: 46% 54% 60% 40% / 50% 46% 54% 50%; }
-  50% { border-radius: 56% 44% 46% 54% / 44% 58% 42% 56%; }
-  100% { border-radius: 42% 58% 54% 46% / 58% 44% 56% 42%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  html[data-look="tile"] .orb::before, html[data-look="tile"] .orb::after, html[data-look="tile"] .orb-tag,
-  html[data-look="tile"] .orb-rim, html[data-look="tile"] .stage::before { animation: none; }
-}
-
-/* клетка теперь рисуется на холсте (cell.ts): старые CSS-слои в виде «плитка» выключены */
-.orb > .cell { display: none; }
-html[data-look="tile"] .orb > .cell {
-  display: block;
-  position: absolute;
-  inset: -45%;
-  width: 190%;
-  height: 190%;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(120% 50% at 30% 0%, rgba(255, 255, 255, 0.75), transparent 60%);
   pointer-events: none;
 }
-html[data-look="tile"] .orb::before,
-html[data-look="tile"] .orb::after,
-html[data-look="tile"] .orb-tag,
-html[data-look="tile"] .orb-rim,
-html[data-look="tile"] .stage::before,
-html[data-look="tile"] .stage::after { display: none; animation: none; }
-html[data-look="tile"] .orb { scale: 1; }
-/* глаза сидят на ядре и сплющиваются вместе с линзой */
-html[data-look="tile"] .eyes {
-  top: 50%;
-  left: 50%;
-  translate: calc(-50% + var(--lx, 0px) * 0.4 + var(--px, 0px)) calc(-50% + var(--ly, 0px) * 0.4 + var(--py, 0px));
-  scale: var(--sq, 1) 1;
-  transition: none;
+html[data-look="bokeh"] .dock .who {
+  order: 1;
+  margin: 0;
+  text-align: left;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
 }
-/* глаза растут и сжимаются вместе с клеткой */
-html[data-look="tile"] .eyes { scale: calc(var(--sq, 1) * var(--es, 1)) var(--es, 1); }
+html[data-look="bokeh"] .dock .hook {
+  order: 2;
+  margin-top: 2px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--mute);
+}
+html[data-look="bokeh"] .dock .hook.open { color: var(--ink); }
+html[data-look="bokeh"] .dock .transcript { order: 3; text-align: left; color: var(--icon); }
+/* волосок прогресса — светящаяся линия по верхней кромке стекла */
+html[data-look="bokeh"] .dock .hair {
+  position: absolute;
+  left: 26px;
+  right: 26px;
+  top: -10px;
+  width: auto;
+  margin: 0;
+  height: 20px;
+}
+html[data-look="bokeh"] .dock .hair::before { top: 9px; height: 2px; background: rgba(255, 255, 255, 0.55); }
+html[data-look="bokeh"] .dock .hair i { top: 9px; height: 2px; background: var(--ink); box-shadow: 0 0 6px rgba(255, 255, 255, 0.9); }
+html[data-look="bokeh"] .dock .actions { order: 4; margin-top: 10px; gap: 6px; padding: 0; }
+html[data-look="bokeh"] .dock .actions .pill:not(.dark) {
+  height: 40px;
+  min-width: 40px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 0.6px rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-look="bokeh"] .dock .actions .pill::before { display: none; }
+html[data-look="bokeh"] .dock .actions small { color: var(--ink); font-weight: 500; }
+/* «Ответить» — капля стекла в моём цвете */
+html[data-look="bokeh"] .dock .pill.dark {
+  width: 52px;
+  height: 52px;
+  margin: -6px -4px -2px 0;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, 0.55), transparent 60%),
+    linear-gradient(160deg, color-mix(in oklab, var(--me1, #8f7dff) 90%, #fff), var(--me2, #6e5bf0));
+  box-shadow: var(--lg-edge), 0 10px 24px -8px color-mix(in oklab, var(--me1, #8f7dff) 70%, transparent);
+}
+html[data-look="bokeh"] .dock .pill.dark .ico { stroke: #fff; }
+/* веер реакций внутри стеклянного дока — плотнее, чтобы читался над облаком */
+html[data-look="bokeh"] .fan { background: rgba(255, 255, 255, 0.86); bottom: 54px; }
+
+/* навигация — вторая стеклянная капсула под доком */
+html[data-look="bokeh"] .tabbar { margin-top: 10px; padding: 6px; border-radius: 999px; }
+html[data-look="bokeh"] .tab { color: var(--icon); }
+html[data-look="bokeh"] .tab.on { background: rgba(255, 255, 255, 0.7); box-shadow: inset 0 0 0 0.6px #fff, 0 4px 12px -6px rgba(40, 36, 90, 0.3); color: var(--ink); }
+html[data-look="bokeh"] .tab.on::after { background: var(--ink); box-shadow: none; }
+html[data-look="bokeh"] .badge { background: #ff1f4b; box-shadow: 0 2px 8px rgba(255, 31, 75, 0.45); }
+html[data-look="bokeh"] .top .chan { font-weight: 500; color: var(--ink); }
+
+/* ---------- запись: облако улетает, интерфейс — то же стекло ---------- */
+html[data-look="bokeh"] .recorder { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html[data-look="bokeh"] .recorder::before { display: none; }
+html[data-look="bokeh"] .who.big { color: var(--ink); font-weight: 300; }
+html[data-look="bokeh"] .recorder .hair::before { background: rgba(255, 255, 255, 0.6); }
+html[data-look="bokeh"] .recorder .hair i { background: var(--ink); }
+html[data-look="bokeh"] .rec-btn .ico { stroke: #ff1f4b; }
+html[data-look="bokeh"] .pill.dark:not(.big-play) .ico { stroke: #fff; }
+html[data-look="bokeh"] #publish { background: linear-gradient(160deg, color-mix(in oklab, var(--me1, #8f7dff) 90%, #fff), var(--me2, #6e5bf0)); }
+
+/* ---------- «Моё», кабинет, листы ---------- */
+html[data-look="bokeh"] .big-play.dark { color: var(--ink); background: var(--lg-fill); }
+html[data-look="bokeh"] .big-play .ico { stroke: #ff1f4b; fill: #ff1f4b; }
+html[data-look="bokeh"] .tile.new::after { background: #ff1f4b; box-shadow: 0 0 8px rgba(255, 31, 75, 0.5); }
+html[data-look="bokeh"] .sheet { background: rgba(250, 250, 255, 0.55); }
+html[data-look="bokeh"] .sheet-row.on, html[data-look="bokeh"] .sheet-row:active { background: rgba(255, 255, 255, 0.85); color: var(--ink); }
+html[data-look="bokeh"] .switch.on { background: var(--ink); }
+html[data-look="bokeh"] .seg.done, html[data-look="bokeh"] .seg.now { background: var(--ink); box-shadow: none; }
+html[data-look="bokeh"] .me-stage .orb { display: none; }
+html[data-look="bokeh"] .me-stage { height: 160px; }

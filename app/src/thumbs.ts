@@ -13,7 +13,7 @@ function setup(canvas: HTMLCanvasElement) {
 }
 
 import { hsl, type Aura } from "./aura";
-import { drawCellFrame, restState } from "./cell";
+import { drawBokehThumb } from "./bokeh";
 
 // мини-персонаж: матовое светлое тело, внутри — тёплое ядро цвета автора,
 // снизу — холодный отсвет, края растворяются в ореоле.
@@ -27,7 +27,7 @@ export function drawRing(canvas: HTMLCanvasElement, _env: ArrayLike<number> | un
   const R = Math.min(w, h) * 0.36;
   const [h1, h2] = a ?? [250, 210];
   const vivid = a ? 1 : 0.3;
-  if (document.documentElement.dataset.look === "tile") return drawCellThumb(ctx, w, h, dpr, h1, !!a);
+  if (document.documentElement.dataset.look === "bokeh") return drawBokehThumb(ctx, w, h, h1, !!a);
 
   // ореол: мягкий пастельный свет вокруг
   const halo = ctx.createRadialGradient(cx, cy + R * 0.1, R * 0.6, cx, cy + R * 0.1, R * 1.4);
@@ -36,12 +36,9 @@ export function drawRing(canvas: HTMLCanvasElement, _env: ArrayLike<number> | un
   ctx.fillStyle = halo;
   ctx.fillRect(0, 0, w, h);
 
-  // в виде «плитка» тело — скруглённый квадрат, как иконка
-  const tile = document.documentElement.dataset.look === "tile";
   const shape = () => {
     ctx.beginPath();
-    if (tile) ctx.roundRect(cx - R, cy - R, R * 2, R * 2, R * 0.62);
-    else ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
   };
   ctx.save();
   shape();
@@ -70,13 +67,6 @@ export function drawRing(canvas: HTMLCanvasElement, _env: ArrayLike<number> | un
   ctx.fillStyle = edge;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();
-  if (tile) {
-    // тонкая светлая кромка стекла
-    shape();
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = dpr;
-    ctx.stroke();
-  }
 
   // глаза: открытые — тихие капсулы, закрытые — дуги ‿ ‿
   const ink = `oklch(${a ? 0.32 : 0.5} 0.05 ${h1 + 20})`;
@@ -97,35 +87,4 @@ export function drawRing(canvas: HTMLCanvasElement, _env: ArrayLike<number> | un
       ctx.stroke();
     }
   }
-}
-
-// вид «плитка»: стоп-кадр той же клетки, что в эфире; у каждого автора — свой момент
-// кувырка (по оттенку ауры). Просмотренная — бледнее, глаза закрыты дугами
-function drawCellThumb(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number, hue: number, fresh: boolean) {
-  const st = restState((hue / 360) * 20);
-  st.size = 1.05;
-  st.bump = 0.06;
-  const eye = drawCellFrame(ctx, w, h, st, fresh ? 1 : 0.45);
-  const R = Math.min(w, h) * 0.27 * st.size;
-  const x0 = w / 2 + eye.x;
-  const y0 = h / 2 + eye.y;
-  ctx.save();
-  ctx.fillStyle = ctx.strokeStyle = "#fff";
-  ctx.shadowColor = "rgba(255,255,255,0.8)";
-  ctx.shadowBlur = R * 0.08;
-  for (const dx of [-R * 0.12, R * 0.12]) {
-    const x = x0 + dx * eye.squash;
-    if (fresh) {
-      ctx.beginPath();
-      ctx.roundRect(x - R * 0.045, y0 - R * 0.12, R * 0.09, R * 0.24, R * 0.045);
-      ctx.fill();
-    } else {
-      ctx.lineWidth = 1.6 * dpr;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.arc(x, y0 - R * 0.04, R * 0.08, Math.PI * 0.15, Math.PI * 0.85);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
 }

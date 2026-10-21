@@ -295,7 +295,7 @@ const D: Record<string, Row> = {
   // личный кабинет
   "look": ["Look", "Вид", "Ansicht", "Estilo", "Style"],
   "look.soft": ["Soft light", "Мягкий свет", "Weiches Licht", "Luz suave", "Lumière douce"],
-  "look.tile": ["Glass tile", "Стеклянная плитка", "Glaskachel", "Baldosa de cristal", "Tuile de verre"],
+  "look.bokeh": ["Bokeh", "Боке", "Bokeh", "Bokeh", "Bokeh"],
   "profile": ["Profile", "Профиль", "Profil", "Perfil", "Profil"],
   "openProfile": ["Open your profile", "Открыть профиль", "Profil öffnen", "Abrir tu perfil", "Ouvrir ton profil"],
   "meOrbAria": ["Your voice character. Tap to say hi", "Твой персонаж голоса. Коснись — поздоровается", "Deine Stimmfigur. Tippen zum Begrüßen", "Tu personaje de voz. Tócalo para saludar", "Ton personnage de voix. Touche pour dire bonjour"],

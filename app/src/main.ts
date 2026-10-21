@@ -6,10 +6,10 @@ import {
   type Moment, type Post, type ReportReason, type Stored, type Stream,
 } from "./feed";
 import { aura, auraGradient, hsl, paintAura } from "./aura";
-import { ago, LANGS, lang, setLang, t, tn, translateDom } from "./i18n";
+import { LANGS, lang, setLang, t, tn, translateDom } from "./i18n";
 import { icon, paintIcons } from "./icons";
 import { look, LOOKS, setLook } from "./look";
-import { Cell } from "./cell";
+import { Field } from "./bokeh";
 import { MEMES, playReaction, REACTIONS, type Reaction } from "./reactions";
 import {
   allowsWithoutAsking, authorAllows, countUse, createSound, durationOf, isSoundKey, liveSounds, MAX_DUR, mySounds,
@@ -22,8 +22,8 @@ import { N, Visual, type Mark } from "./visual";
 
 paintIcons();
 translateDom();
-// вид «плитка»: в каждом питомце живёт клетка на холсте
-document.querySelectorAll<HTMLElement>(".orb").forEach((orb) => new Cell(orb, () => look === "tile"));
+// вид «боке»: облако точек во весь экран, позади всего интерфейса
+const field = new Field(() => look === "bokeh");
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -282,6 +282,7 @@ function show() {
   const a = aura(p.author);
   paintAura($("home"), a); // аура на весь экран: её видят и свечение, и волосок под диском
   visual.setAura(a);
+  field.setAura(a);
   if (swapDir) {
     const st = $("stage");
     st.classList.remove("swap-next", "swap-prev");
@@ -307,13 +308,6 @@ function show() {
   $("segments").innerHTML =
     mode.kind === "radio" ? "" : items.map((_, i) => `<span class="seg${i < qi ? " done" : i === qi ? " now" : ""}"><i></i></span>`).join("");
   $("fan").hidden = true;
-  // вид «плитка»: подпись на питомце (тег или «когда») и точки очереди — до пяти вокруг текущей
-  $("orbTag").textContent = p.tags[0] ?? ago(p.createdAt);
-  const from = Math.max(0, Math.min(qi - 2, items.length - 5));
-  $("dots").innerHTML = items
-    .slice(from, from + 5)
-    .map((_, i) => `<i class="${from + i === qi ? "now" : ""}"></i>`)
-    .join("");
 }
 
 function next() {
@@ -370,8 +364,6 @@ player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && 
   $("hairFill").style.width = `${(el.ended ? 0 : prog) * 100}%`;
   $("hair").setAttribute("aria-valuenow", String(Math.round(prog * 100)));
   $("startBtn").hidden = started;
-  const time = clock(el.ended ? 0 : el.currentTime);
-  if ($("clock").textContent !== time) $("clock").textContent = time;
   // персонаж «говорит», пока звучит голос; на паузе и до старта — спит
   $("orb").classList.toggle("sleep", !started || el.paused);
 })();
@@ -441,6 +433,7 @@ function react(r: Reaction, big = false) {
   const p = cur().post;
   const at = progressNow();
   addReaction(p, r, at);
+  field.burst(36);
   visual.setMarks(marksFor(p, !cur().parent));
   visual.flash(at);
   playReaction(r, player.fx(2600)); // мемы длиннее эмоций — держим анализатор открытым
@@ -1057,6 +1050,13 @@ $("meStage").onkeydown = (e) => (e.key === "Enter" || e.key === " ") && (e.preve
 $("meRename").onclick = () => {
   const name = renameMe();
   paintMe();
+
+// облако слушает то, что звучит: запись — мой голос улетает вдаль; эфир — голос автора летит на меня
+field.source = () => {
+  if (!$("recorder").hidden) return { level: recVisual.level, tone: recVisual.tone, out: true, idle: !recorder.active && preview.el.paused };
+  if (view === "home" && started && !player.el.paused) return { level: visual.level, tone: visual.tone, out: false, idle: false };
+  return { level: 0, out: false, idle: true };
+};
   renderProfile();
   greet();
   toast(t("nowName", { name }));
@@ -1210,6 +1210,7 @@ function openRecorder(to: Post | null, at?: number) {
   const mine = aura(me());
   paintAura($("recStage"), mine);
   recVisual.setAura(mine);
+  field.setAura(mine);
   $("recWhat").innerHTML = to ? `${icon("reply")}${escapeHtml(to.author)}` : `${icon("mic")}${t("upTo", { n: POST_MS / 1000 })}`;
   reset();
   $("recorder").hidden = false;

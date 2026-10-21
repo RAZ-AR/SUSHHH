@@ -1,14 +1,15 @@
-// Вид интерфейса: «мягкий свет» (по умолчанию) или «плитка» — питомец в стеклянной
-// плитке на перфорированной бумаге. Хранится на устройстве, ставится до первой отрисовки.
+// Вид интерфейса: «мягкий свет» (по умолчанию) или «боке» — голос как облако цветных
+// точек во весь экран, управление — жидкое стекло поверх. Хранится на устройстве, ставится до первой отрисовки.
 
-export type Look = "soft" | "tile";
-export const LOOKS: Look[] = ["soft", "tile"];
+export type Look = "soft" | "bokeh";
+export const LOOKS: Look[] = ["soft", "bokeh"];
 const KEY = "sushhh.look";
 
 function read(): Look {
   try {
     const v = localStorage.getItem(KEY);
-    if (v === "tile" || v === "soft") return v;
+    if (v === "bokeh" || v === "soft") return v;
+    if (v === "tile") return "bokeh"; // прежний вид «плитка» заменён на «боке»
   } catch {
     // без хранилища — по умолчанию
   }

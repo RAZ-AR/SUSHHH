@@ -7,7 +7,7 @@
     <title>SUSHHH</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500&family=Unbounded:wght@300;400;500&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500&display=swap" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
@@ -37,13 +37,15 @@
       </div>
 
       <div class="stage" id="stage" data-i18n-aria="stageAria">
-        <div class="orb" id="orb" aria-hidden="true"><div class="orb-rim"></div><span class="orb-tag" id="orbTag"></span><div class="eyes"><i></i><i></i></div></div>
+        <div class="orb" id="orb" aria-hidden="true"><div class="orb-rim"></div><div class="eyes"><i></i><i></i></div></div>
         <canvas id="cv"></canvas>
         <button class="start" id="startBtn" data-i18n-aria="startAria"><i data-i="play"></i></button>
         <div class="floaters" id="floaters"></div>
         <p class="sr-only" aria-live="polite" id="live"></p>
       </div>
 
+      <!-- док: в «мягком свете» его нет (display: contents), в «боке» — панель жидкого стекла -->
+      <div class="dock">
       <p class="who" id="who"></p>
       <div class="hair" id="hair" role="slider" tabindex="0" data-i18n-aria="hairAria" aria-valuemin="0" aria-valuemax="100"><i id="hairFill"></i></div>
       <p class="hook" id="hook" role="button" tabindex="0" data-i18n-aria="hookAria"></p>
@@ -57,9 +59,7 @@
         <button class="pill dark icon-only" id="reply" data-i18n-aria="replyAria"><i data-i="mic"></i></button>
         <div class="fan" id="fan" hidden></div>
       </div>
-      <!-- вид «плитка»: время записи и точки очереди, как часы и страницы на экране блокировки -->
-      <p class="clock" id="clock" aria-hidden="true"></p>
-      <div class="dots" id="dots" aria-hidden="true"></div>
+      </div>
 
       <nav class="tabbar" data-i18n-aria="sectionsAria">
         <button class="tab on" data-go="home" data-i18n-aria="air" aria-current="page"><i data-i="headphones"></i></button>
@@ -94,7 +94,7 @@
       </header>
       <div class="me-scroll">
       <div class="stage me-stage" id="meStage" role="button" tabindex="0" data-i18n-aria="meOrbAria">
-        <div class="orb" id="meOrb" aria-hidden="true"><div class="orb-rim"></div><span class="orb-tag"></span><div class="eyes"><i></i><i></i></div></div>
+        <div class="orb" id="meOrb" aria-hidden="true"><div class="orb-rim"></div><div class="eyes"><i></i><i></i></div></div>
       </div>
       <p class="who" id="meName"></p>
       <button class="pill quiet me-rename" id="meRename"><i data-i="rotate"></i><span data-i18n="newName"></span></button>
@@ -115,7 +115,7 @@
         <span class="pill" id="recWhat"></span>
         <button class="pill icon-only" id="close" data-i18n-aria="close"><i data-i="x"></i></button>
       </header>
-      <div class="stage" id="recStage"><div class="orb listen" id="recOrb" aria-hidden="true"><div class="orb-rim"></div><span class="orb-tag"></span><div class="eyes"><i></i><i></i></div></div><canvas id="cv2"></canvas></div>
+      <div class="stage" id="recStage"><div class="orb listen" id="recOrb" aria-hidden="true"><div class="orb-rim"></div><div class="eyes"><i></i><i></i></div></div><canvas id="cv2"></canvas></div>
       <p class="who big" id="recTime">0:00</p>
       <div class="hair"><i id="recHairFill"></i></div>
       <p class="rec-text" id="recText"></p>
