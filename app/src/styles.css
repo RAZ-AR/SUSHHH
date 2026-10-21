@@ -1392,3 +1392,12 @@ html[data-look="bokeh"] .switch.on { background: var(--ink); }
 html[data-look="bokeh"] .seg.done, html[data-look="bokeh"] .seg.now { background: var(--ink); box-shadow: none; }
 html[data-look="bokeh"] .me-stage .orb { display: none; }
 html[data-look="bokeh"] .me-stage { height: 160px; }
+
+/* ---------- «Боке»: правки по аудиту ---------- */
+/* запись поверх облака: экраны под ней прячем, иначе их текст и кнопки просвечивают */
+html[data-look="bokeh"] body:has(#recorder:not([hidden])) .app { visibility: hidden; }
+/* серый текст на стекле — 5.6:1 вместо 3.8:1 */
+html[data-look="bokeh"] { --mute: #565665; --label: #565665; }
+/* цели касания — не меньше 44 px; «Ответить» не вылезает за край дока */
+html[data-look="bokeh"] .dock .actions .pill:not(.dark) { height: 44px; min-width: 44px; }
+html[data-look="bokeh"] .dock .pill.dark { width: 48px; height: 48px; margin: 0; }

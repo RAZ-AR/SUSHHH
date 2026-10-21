@@ -2,9 +2,9 @@
 // Cecilia Erlich: бледно-лавандовый фон, сотни насыщенных точек разного размера,
 // почти все — не в фокусе). Каждый слог выпускает из центра горсть точек; они летят
 // к зрителю, растут, проходят плоскость фокуса (становятся резкими) и снова
-// размываются. Главное — цветные сферы: в тишине они невесомо висят и дрейфуют
-// в пространстве, как туманности; на голосе каждая превращается в чашку с волнами
-// Фарадея (faraday.ts), голос стих — решётка тает обратно в мягкую сферу.
+// размываются. Главное — мягкие цветные пятна: в тишине они невесомо висят и дрейфуют
+// в пространстве, как туманности; на голосе медленно дышат, светлеют и раскрываются
+// ореолом (faraday.ts), голос стих — так же медленно затихают.
 // Точки — лёгкая пыль вокруг, тонкий поток медленно закручивается вихрем.
 // Звук: пятна раздуваются и ускоряются, точки летят быстрее и гуще, вихрь крутится
 // сильнее, а на начале каждого слога — толчок: точки на миг вырастают и выбрасывается
@@ -56,8 +56,17 @@ const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
 
 export type FieldSource = () => { level: number; tone?: number; out: boolean; idle: boolean };
 
-// симметрия волн Фарадея по автору: квадраты, шестиугольники, 8- и 12-лучевые квазикристаллы
-const SYMS = [3, 4, 2, 6, 3, 4, 6, 2, 4, 3, 6, 4, 3, 2, 6];
+
+// спрайты точек одного цвета не пересоздаём: при смене голоса раньше рождалось ~100 холстов
+const spriteCache = new Map<string, HTMLCanvasElement[]>();
+const spritesFor = (c: string) => {
+  let set = spriteCache.get(c);
+  if (!set) {
+    set = Array.from({ length: LEVELS }, (_, i) => sprite(c, i / (LEVELS - 1)));
+    spriteCache.set(c, set);
+  }
+  return set;
+};
 
 export class Field {
   private cv = document.createElement("canvas");
@@ -71,27 +80,25 @@ export class Field {
   private prev = 0; // прошлая громкость — чтобы ловить начало слога
   private pulse = 0; // толчок на атаке, быстро гаснет
   private phase = Math.random() * 100; // время пятен фона
-  private spin = 0.04; // скорость вихря
+  private spin = 0.012; // скорость вихря
+  private time = 0; // общее время для мерцания
   private spotColors: string[] = [];
   private spotRgb: [number, number, number][] = [];
   private surface = new Surface();
-  private sym = 3;
   private orbs: Orb[] = Array.from({ length: MAX_SPOTS }, (_, i) => ({
     // по сетке 3×3 с разбросом — чтобы сферы заполняли всё пространство
     x: ((i % 3) - 1) * 0.75 + (Math.random() - 0.5) * 0.4,
     y: (Math.floor(i / 3) - 1) * 1.05 + (Math.random() - 0.5) * 0.4,
     z: 1 + Math.random() * 1.4,
-    vx: (Math.random() - 0.5) * 0.05,
-    vy: (Math.random() - 0.5) * 0.05,
-    vz: (Math.random() - 0.5) * 0.04,
+    vx: (Math.random() - 0.5) * 0.025,
+    vy: (Math.random() - 0.5) * 0.025,
+    vz: (Math.random() - 0.5) * 0.02,
     r: 0.16 + Math.random() * 0.2,
     c: i,
     morph: 0,
     seed: Math.random() * 10,
   }));
-  private k = 16; // частота решётки (в радиусах сферы)
   private osc = 0; // фаза колебания поверхности
-  private rot = Math.random() * 3;
   private calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
   source: FieldSource = () => ({ level: 0, out: false, idle: true });
 
@@ -99,7 +106,7 @@ export class Field {
     this.cv.className = "field";
     this.cv.setAttribute("aria-hidden", "true");
     document.body.prepend(this.cv);
-    // поверхность с волнами Фарадея — под точками
+    // слой мягких пятен — под точками
     if (this.surface.ok) {
       this.surface.canvas.className = "field field-bg";
       this.surface.canvas.setAttribute("aria-hidden", "true");
@@ -114,9 +121,8 @@ export class Field {
     // большие пятна фона: пастельные, но насыщенные; одно — в цвете автора
     this.spotColors = ["#ff7aa8", "#6f9bff", "#4fdcb4", "#ffbe5c", "#b38aff", "#ff9a6b", "#7fd1ff", hsl(a[0], 1, 62), hsl(a[1], 1, 66)];
     this.spotRgb = this.spotColors.map(rgb);
-    this.sym = SYMS[Math.round(a[0] / 24) % SYMS.length];
     this.colors = [...BASE, ...a.map((h) => hsl(h, 1, 52)), hsl(a[0], 1, 58)];
-    this.sprites = this.colors.map((c) => Array.from({ length: LEVELS }, (_, i) => sprite(c, i / (LEVELS - 1))));
+    this.sprites = this.colors.map(spritesFor);
   }
 
   // всплеск — на реакцию: горсть точек сразу
@@ -159,16 +165,19 @@ export class Field {
     // атака слога: резкий рост громкости — толчок
     const onset = Math.max(0, target - this.prev);
     this.prev = target;
-    this.pulse = Math.max(this.pulse * Math.exp(-dt * 4.5), Math.min(1, onset * 7));
-    if (onset > 0.12 && !this.calm) for (let i = 0; i < 10 + onset * 60; i++) this.spawn(src.out, L);
+    // мягкий толчок на атаке: без хлопков, гаснет медленно
+    this.pulse = Math.max(this.pulse * Math.exp(-dt * 1.5), Math.min(0.5, onset * 3));
+    if (onset > 0.2 && !this.calm) for (let i = 0; i < 4 + onset * 12; i++) this.spawn(src.out, L);
 
     // темп всего поля: тишина — плывёт, голос — летит
-    const tempo = this.calm ? 0 : src.idle ? 0.3 : 0.55 + L * 1.7 + this.pulse * 0.6;
-    this.phase += dt * (this.calm ? 0 : 0.1 + L * 0.8 + this.pulse * 0.6);
-    this.spin += ((src.idle ? 0.03 : 0.06 + L * 0.45) - this.spin) * Math.min(1, dt * 2);
+    // всё медленно: точки плывут, а не летят; вихрь едва заметен
+    const tempo = this.calm ? 0 : src.idle ? 0.14 : 0.22 + L * 0.4 + this.pulse * 0.15;
+    this.phase += dt * (this.calm ? 0 : 0.05 + L * 0.15);
+    this.spin += ((src.idle ? 0.012 : 0.02 + L * 0.06) - this.spin) * Math.min(1, dt * 0.8);
+    this.time += dt;
 
     // выпуск: всегда есть тонкий поток, голос — сотни точек в секунду
-    const rate = this.calm ? 0 : (src.idle ? 8 : 12) + L * 240;
+    const rate = this.calm ? 0 : (src.idle ? 5 : 8) + L * 90;
     const cap = src.idle ? 100 : 240; // точки — лёгкая пыль вокруг сфер, а не главное
     this.debt += rate * dt;
     while (this.debt >= 1 && this.ps.length < cap) {
@@ -180,13 +189,11 @@ export class Field {
     const ctx = this.ctx;
     const m = Math.min(W, H);
     // 1. сферы: в тишине невесомо дрейфуют в пространстве (параллакс, медленный поворот),
-    //    на голосе замирают и превращаются в чашки с волнами Фарадея; тяжёлые — медленнее
+    //    на голосе замирают, дышат и светлеют; тяжёлые откликаются медленнее
     const drive = this.calm ? 0 : Math.min(1, Math.max(0, (L - 0.1) / 0.4)) * (0.85 + this.pulse * 0.3);
-    const tone = src.tone ?? 0.4;
-    this.k += (Math.PI * 2 * (2 + tone * 2.8) - this.k) * Math.min(1, dt * 1.2);
     if (!this.calm) {
-      this.osc += dt * Math.PI * 2 * (1.1 + L * 1.8);
-      this.rot += dt * (0.02 + L * 0.06);
+      // узор дышит раз в 3–4 секунды и едва поворачивается
+      this.osc += dt * Math.PI * 2 * (0.22 + L * 0.12);
     }
     const drift = this.calm ? 0 : 1 - drive * 0.7;
     const turn = dt * 0.03 * drift;
@@ -205,7 +212,8 @@ export class Field {
       if (o.z < 0.9 || o.z > 2.5) o.vz -= Math.sign(o.z - 1.7) * 0.03 * dt;
       // превращение: быстрее у маленьких, медленнее у больших
       const mass = 0.6 + o.r * 2.5;
-      o.morph += (drive - o.morph) * Math.min(1, (dt * (drive > o.morph ? 3.2 : 1.3)) / mass);
+      // превращение и обратное таяние — по 2–3 секунды
+      o.morph += (drive - o.morph) * Math.min(1, (dt * (drive > o.morph ? 0.9 : 0.5)) / mass);
     }
     const cw = innerWidth;
     const ch = innerHeight;
@@ -221,7 +229,7 @@ export class Field {
         alpha: Math.min(0.92, 0.5 + 0.55 / o.z),
       }));
     if (this.surface.ok) {
-      this.surface.draw(Math.round(cw), Math.round(ch), spots, { k: this.k, sym: this.sym, osc: this.osc, rot: this.rot });
+      this.surface.draw(Math.round(cw), Math.round(ch), spots, { osc: this.osc, t: this.time });
       ctx.clearRect(0, 0, W, H);
     } else {
       ctx.globalAlpha = 1;
@@ -259,7 +267,7 @@ export class Field {
     }
     this.ps = alive;
     alive.sort((a, b) => b.z - a.z);
-    const pop = 1 + this.pulse * 0.3;
+    const pop = 1 + this.pulse * 0.08;
     for (const p of alive) {
       const sx = W / 2 + (p.x / p.z) * f;
       const sy = H / 2 + (p.y / p.z) * f;
@@ -268,7 +276,9 @@ export class Field {
       const r = (p.s / p.z) * f * (1 + b * 0.55) * pop;
       // появление издалека и исчезновение у самого носа / на краю пути
       const fade = p.vz < 0 ? Math.min(1, (1.35 - p.z) / 0.35) * Math.min(1, (p.z - 0.06) / 0.08) : Math.min(1, (1.5 - p.z) / 0.4);
-      ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+      // точки тихо мерцают, каждая в своём ритме
+      const twinkle = 0.72 + 0.28 * Math.sin(this.time * 1.1 + p.s * 900 + p.c);
+      ctx.globalAlpha = Math.max(0, Math.min(1, fade * twinkle));
       ctx.drawImage(this.sprites[p.c][Math.round(b * (LEVELS - 1))], sx - r, sy - r, r * 2, r * 2);
     }
     ctx.globalAlpha = 1;

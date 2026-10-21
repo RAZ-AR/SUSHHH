@@ -1039,6 +1039,7 @@ function paintMe() {
 // персонаж в кабинете: коснулся — улыбнулся
 let meMoodTimer = 0;
 function greet() {
+  if (look === "bokeh") field.burst(40); // в «боке» сфера отвечает всплеском точек
   const orb = $("meOrb");
   orb.classList.add("happy");
   clearTimeout(meMoodTimer);
@@ -1050,13 +1051,6 @@ $("meStage").onkeydown = (e) => (e.key === "Enter" || e.key === " ") && (e.preve
 $("meRename").onclick = () => {
   const name = renameMe();
   paintMe();
-
-// облако слушает то, что звучит: запись — мой голос улетает вдаль; эфир — голос автора летит на меня
-field.source = () => {
-  if (!$("recorder").hidden) return { level: recVisual.level, tone: recVisual.tone, out: true, idle: !recorder.active && preview.el.paused };
-  if (view === "home" && started && !player.el.paused) return { level: visual.level, tone: visual.tone, out: false, idle: false };
-  return { level: 0, out: false, idle: true };
-};
   renderProfile();
   greet();
   toast(t("nowName", { name }));
@@ -1384,6 +1378,13 @@ $("close").onclick = closeRecorder;
 
 // моя аура — цвет кнопок, которыми говорю я: «ответить» и записать
 paintMe();
+
+// облако слушает то, что звучит: запись — мой голос улетает вдаль; эфир — голос автора летит на меня
+field.source = () => {
+  if (!$("recorder").hidden) return { level: recVisual.level, tone: recVisual.tone, out: true, idle: !recorder.active && preview.el.paused };
+  if (view === "home" && started && !player.el.paused) return { level: visual.level, tone: visual.tone, out: false, idle: false };
+  return { level: 0, out: false, idle: true };
+};
 
 loadFeed().then((f) => {
   feed = f;

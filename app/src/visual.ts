@@ -76,11 +76,12 @@ export class Visual {
 
   private frame = (now: number) => {
     requestAnimationFrame(this.frame);
-    if (!this.w || !this.h) return;
+    // громкость и тембр считаем всегда — даже когда холст скрыт (вид «боке» берёт их отсюда)
     const s = this.source?.() ?? null;
     const target = s ? s.level : 0;
     this.env += (target - this.env) * (target > this.env ? 0.45 : 0.1);
     this.toneLv += ((s?.tone ?? 0.3) - this.toneLv) * 0.08;
+    if (!this.w || !this.h) return;
 
     const ctx = this.ctx;
     const d = this.dpr;
