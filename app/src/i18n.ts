@@ -295,6 +295,7 @@ const D: Record<string, Row> = {
   "replySent": ["Reply sent", "Ответ отправлен", "Antwort gesendet", "Respuesta enviada", "Réponse envoyée"],
   "onAirNow": ["On air", "В эфире", "Live", "En emisión", "À l'antenne"],
   // подписи по умолчанию
+  "repliedToYou": ["Someone replied to you", "Тебе ответили", "Jemand hat dir geantwortet", "Alguien te respondió", "Quelqu’un t’a répondu"],
   "replyFallback": ["Reply", "Ответ", "Antwort", "Respuesta", "Réponse"],
   "yourReply": ["Your reply", "Твой ответ", "Deine Antwort", "Tu respuesta", "Ta réponse"],
   "yourPost": ["Your post", "Твоя запись", "Dein Beitrag", "Tu publicación", "Ton post"],

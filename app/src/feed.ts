@@ -2,6 +2,7 @@
 // реакции, потоки и рейтинг обсуждаемости для сторис.
 
 import type { Loudness } from "./audio";
+import { audioUrl, connect, eraseAccount, fetchFeed, myUid, publish, removePost, rename, sendReaction, sendReport, type RemotePost } from "./backend";
 import { t } from "./i18n";
 
 export type Post = {
@@ -212,6 +213,7 @@ function myReactions(): Record<string, [string, number][]> {
 export function addReaction(p: Post, emoji: string, at: number) {
   p.reactions[emoji] = (p.reactions[emoji] ?? 0) + 1;
   p.moments.push({ emoji, at });
+  sendReaction(p.id, emoji, at);
   const all = myReactions();
   (all[p.id] ??= []).push([emoji, at]);
   try {
@@ -302,14 +304,16 @@ export function report(id: string, reason: ReportReason) {
     list.push({ id, reason, at: Date.now() });
     localStorage.setItem("sushhh.reports", JSON.stringify(list));
   } catch {
-    // без хранилища жалоба теряется — в продукте она уходит на сервер
+    // без хранилища локальная копия теряется; на сервер жалоба всё равно ушла
   }
+  sendReport(id, reason);
   hidePost(id); // пожаловавшийся больше не слышит эту запись
 }
 
 export async function deleteRecording(id: string) {
   hidePost(id); // демо-записи «моих» постов удалить нельзя — просто прячем
   revokeBlob(id);
+  void removePost(id).catch(() => {});
   try {
     const d = await db();
     await new Promise<void>((resolve, reject) => {
@@ -334,11 +338,13 @@ export function renameMe() {
   } catch {
     // без хранилища псевдоним не сохранится
   }
+  void rename(next).catch(() => {});
   return next;
 }
 
 // стереть всё, что приложение хранит на устройстве: настройки, реакции, записи
 export async function eraseEverything() {
+  await eraseAccount().catch(() => {});
   for (const id of blobUrls.keys()) revokeBlob(id);
   try {
     for (const k of Object.keys(localStorage)) if (k.startsWith("sushhh.") && k !== "sushhh.lang") localStorage.removeItem(k);
@@ -397,6 +403,37 @@ export function storedToPost(s: Stored): Post {
   };
 }
 
+const withTimeout = <T>(p: Promise<T>, ms: number) =>
+  Promise.race([p.catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), ms))]);
+
+// своя запись → в общий эфир; без сети просто останется в очереди до следующего запуска
+export function publishRecording(s: Stored) {
+  return publish({ id: s.id, blob: s.blob, replyTo: s.replyTo, at: s.at, text: s.text, env: s.env, palette: s.palette, tags: [] }, me()).catch(() => false);
+}
+
+export function remoteToPost(r: RemotePost): Post {
+  const mine = r.author_id === myUid();
+  return {
+    id: r.id, author: mine ? me() : r.author_name, mine, createdAt: Date.parse(r.created_at), palette: r.palette, src: audioUrl(r.audio_path),
+    hook: hookFrom(r.text ?? undefined, t(r.reply_to ? "replyFallback" : "transcriptPending")), text: r.text ?? undefined,
+    env: r.env ?? undefined, at: r.at ?? undefined, tags: r.tags ?? [], reactions: {}, moments: [], replies: [],
+  };
+}
+
+// новый голос пришёл в реальном времени: встаёт в ленту или в ветку; null — ветки у нас нет
+export function addRemotePost(feed: Post[], r: RemotePost): { post: Post; root: Post } | null {
+  if (findPost(feed, r.id)) return null;
+  const post = remoteToPost(r);
+  if (!r.reply_to) {
+    feed.unshift(post);
+    return { post, root: post };
+  }
+  const parent = findPost(feed, r.reply_to)?.root;
+  if (!parent) return null;
+  parent.replies.push(post);
+  return { post, root: parent };
+}
+
 export async function loadFeed(): Promise<Post[]> {
   const feed = SEED.map(fromSeed);
   const byId = new Map<string, Post>();
@@ -412,6 +449,27 @@ export async function loadFeed(): Promise<Post[]> {
     const parent = s.replyTo ? byId.get(s.replyTo) : undefined;
     if (parent) parent.replies.push(post);
     else if (!s.replyTo) feed.unshift(post);
+  }
+
+  // общий эфир: чужие голоса и реакции; свои неотправленные записи уходят на сервер (очередь без сети)
+  const remote = await withTimeout(connect(me()).then((ok) => (ok ? fetchFeed() : null)), 5000);
+  if (remote) {
+    for (const r of [...remote.posts].reverse()) {
+      if (byId.has(r.id)) continue; // своя запись уже есть локально — играем из памяти
+      const post = remoteToPost(r);
+      byId.set(post.id, post);
+      if (!r.reply_to) feed.unshift(post);
+      else byId.get(r.reply_to)?.replies.push(post);
+    }
+    const uid = myUid();
+    for (const x of remote.reactions) {
+      const p = byId.get(x.post_id);
+      if (!p || x.user_id === uid) continue; // свои реакции уже посчитаны из локальных
+      p.reactions[x.emoji] = (p.reactions[x.emoji] ?? 0) + 1;
+      p.moments.push({ emoji: x.emoji, at: x.at });
+    }
+    const sent = new Set(remote.posts.map((r) => r.id));
+    for (const s of mine) if (!sent.has(s.id)) void publishRecording(s);
   }
 
   for (const [id, list] of Object.entries(myReactions())) {

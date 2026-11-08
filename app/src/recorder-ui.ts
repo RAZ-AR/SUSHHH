@@ -1,7 +1,7 @@
 // Экран записи: микрофон, шумодав, автостоп, прослушать, отправить; обновление приложения ждёт конца записи.
 
 import { envelope, Player, Recorder, warmDenoiser } from "./audio";
-import { findPost, laterIds, me, type Post, removeLater, saveRecording, type Stored, storedToPost } from "./feed";
+import { findPost, laterIds, me, type Post, removeLater, publishRecording, saveRecording, type Stored, storedToPost } from "./feed";
 import { aura, paintAura } from "./aura";
 import { t } from "./i18n";
 import { icon } from "./icons";
@@ -210,6 +210,7 @@ $("publish").onclick = async () => {
     env: take.env.length ? take.env : undefined,
   };
   await saveRecording(stored);
+  void publishRecording(stored); // в общий эфир; без сети уйдёт при следующем запуске
   const post = storedToPost(stored);
   const wasReply = !!replyTo;
   resumeAfter = false;

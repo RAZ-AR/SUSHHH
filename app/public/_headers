@@ -3,7 +3,7 @@
   Permissions-Policy: microphone=(self), camera=(), geolocation=()
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: https://edmpcryegwmlsvrgbjns.supabase.co; connect-src 'self' blob: https://edmpcryegwmlsvrgbjns.supabase.co wss://edmpcryegwmlsvrgbjns.supabase.co; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
 
 # service worker и манифест всегда свежие — иначе обновление приложения застрянет
 /sw.js

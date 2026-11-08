@@ -3,12 +3,14 @@
 import "@fontsource/onest/300.css";
 import "@fontsource/onest/400.css";
 import "@fontsource/onest/500.css";
-import { $ } from "./ui";
-import { loadFeed } from "./feed";
-import { field, setFeed } from "./state";
-import { showView, view } from "./nav";
+import { $, toast } from "./ui";
+import { addRemotePost, loadFeed } from "./feed";
+import { onNewPost } from "./backend";
+import { t } from "./i18n";
+import { feed, field, setFeed } from "./state";
+import { showView, updateBadge, view } from "./nav";
 import { player, renderChannels, renderStories, started, tuneRadio, visual } from "./air";
-import { setMineTab } from "./mine";
+import { renderMine, setMineTab } from "./mine";
 import { paintMe } from "./profile";
 import { openRecorder, preview, recorder, recVisual } from "./recorder-ui";
 import "./fan"; // веер реакций регистрирует свои обработчики при импорте
@@ -44,4 +46,13 @@ loadFeed().then((f) => {
   tuneRadio("foryou", false);
   showView("home");
   openShortcut();
+  // живой эфир: чужие голоса появляются сразу; ответ на мою запись — всплывашка и бейдж
+  onNewPost((r) => {
+    const added = addRemotePost(feed, r);
+    if (!added) return;
+    if (added.root.mine && added.post !== added.root) toast(t("repliedToYou"));
+    updateBadge();
+    renderStories();
+    if (view === "mine") renderMine();
+  });
 });
