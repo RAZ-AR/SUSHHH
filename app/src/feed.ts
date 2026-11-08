@@ -1,6 +1,7 @@
 // Данные: демо-записи с ветками, собственные записи из IndexedDB,
 // реакции, потоки и рейтинг обсуждаемости для сторис.
 
+import type { Loudness } from "./audio";
 import { t } from "./i18n";
 
 export type Post = {
@@ -15,6 +16,7 @@ export type Post = {
   synthetic?: boolean;
   mine?: boolean; // запись текущего пользователя
   env?: ArrayLike<number>; // огибающая для «портрета»
+  loud?: Loudness; // выравнивание громкости и края тишины — считаются при первом разборе
   reactions: Record<string, number>;
   moments: Moment[]; // реакции, привязанные к месту в записи
   at?: number; // для ответа: момент исходной записи (0..1), на который он отвечает
@@ -307,6 +309,7 @@ export function report(id: string, reason: ReportReason) {
 
 export async function deleteRecording(id: string) {
   hidePost(id); // демо-записи «моих» постов удалить нельзя — просто прячем
+  revokeBlob(id);
   try {
     const d = await db();
     await new Promise<void>((resolve, reject) => {
@@ -336,6 +339,7 @@ export function renameMe() {
 
 // стереть всё, что приложение хранит на устройстве: настройки, реакции, записи
 export async function eraseEverything() {
+  for (const id of blobUrls.keys()) revokeBlob(id);
   try {
     for (const k of Object.keys(localStorage)) if (k.startsWith("sushhh.") && k !== "sushhh.lang") localStorage.removeItem(k);
   } catch {
@@ -370,9 +374,24 @@ export function hookFrom(text: string | undefined, fallback: string) {
   return first.slice(0, 52).replace(/\s+\S*$/, "") + "…";
 }
 
+// blob-URL своих записей: освобождаются при удалении, иначе Blob живёт в памяти до закрытия вкладки
+const blobUrls = new Map<string, string>();
+function blobUrl(id: string, blob: Blob) {
+  const old = blobUrls.get(id);
+  if (old) URL.revokeObjectURL(old);
+  const url = URL.createObjectURL(blob);
+  blobUrls.set(id, url);
+  return url;
+}
+function revokeBlob(id: string) {
+  const url = blobUrls.get(id);
+  if (url) URL.revokeObjectURL(url);
+  blobUrls.delete(id);
+}
+
 export function storedToPost(s: Stored): Post {
   return {
-    id: s.id, author: me(), mine: true, createdAt: s.createdAt, palette: s.palette, src: URL.createObjectURL(s.blob),
+    id: s.id, author: me(), mine: true, createdAt: s.createdAt, palette: s.palette, src: blobUrl(s.id, s.blob),
     hook: hookFrom(s.text, t(s.replyTo ? "yourReply" : "yourPost")), text: s.text, env: s.env, at: s.at,
     tags: s.replyTo ? [] : ["моё"], reactions: {}, moments: [], replies: [],
   };

@@ -2,8 +2,9 @@
 
 function setup(canvas: HTMLCanvasElement) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = Math.round(canvas.clientWidth * dpr);
-  const h = Math.round(canvas.clientHeight * dpr);
+  // холст вне страницы (обложка для экрана блокировки) рисуется в своём заданном размере
+  const w = canvas.isConnected ? Math.round(canvas.clientWidth * dpr) : canvas.width;
+  const h = canvas.isConnected ? Math.round(canvas.clientHeight * dpr) : canvas.height;
   if (!w || !h) return null;
   if (canvas.width !== w) canvas.width = w;
   if (canvas.height !== h) canvas.height = h;

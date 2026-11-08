@@ -115,16 +115,22 @@ export function wordsAt(text: string | undefined, frac: number, n = 4) {
 
 // --- воспроизведение фрагмента ---
 
+// раскодированный PCM весит мегабайты: держим только последние несколько записей (LRU)
 const buffers = new Map<string, Promise<AudioBuffer>>();
+const MAX_BUFFERS = 4;
 
 function bufferFor(src: string) {
   let b = buffers.get(src);
-  if (!b) {
+  if (b) {
+    buffers.delete(src); // в конец очереди — недавно использован
+  } else {
     b = fetch(src)
       .then((r) => r.arrayBuffer())
       .then((data) => audioCtx().decodeAudioData(data));
-    buffers.set(src, b);
+    b.catch(() => buffers.get(src) === b && buffers.delete(src)); // ошибку не кэшируем
   }
+  buffers.set(src, b);
+  while (buffers.size > MAX_BUFFERS) buffers.delete(buffers.keys().next().value!);
   return b;
 }
 

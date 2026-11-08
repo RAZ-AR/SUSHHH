@@ -1,4 +1,7 @@
-import { envelope, Player, Recorder } from "./audio";
+import "@fontsource/onest/300.css";
+import "@fontsource/onest/400.css";
+import "@fontsource/onest/500.css";
+import { analyze, envelope, Player, Recorder, warmDenoiser } from "./audio";
 import {
   addReaction, blockAuthor, blockedAuthors, deleteRecording, eraseEverything, findPost, hidePost, isHeard, isLater, laterIds,
   loadFeed, markHeard, me, mostDiscussed, myPosts, myThreads, reactionCount, removeLater, renameMe, repliesToMe, report,
@@ -19,6 +22,10 @@ import {
 import { LiveTranscript } from "./speech";
 import { drawRing } from "./thumbs";
 import { N, Visual, type Mark } from "./visual";
+import {
+  audioSession, initMediaSession, initServiceWorker, install, installKind, keepAwake, onInstallChange, setBadge, setNowPlaying,
+  setPlaybackState, setPosition,
+} from "./pwa";
 
 paintIcons();
 translateDom();
@@ -33,13 +40,18 @@ const RATES = [1, 1.25, 1.5];
 
 let feed: Post[] = [];
 
-// огибающие считаются один раз и кэшируются в самом посте
+// разбор записи (огибающая, громкость, края тишины) — один раз, кэшируется в самом посте
 const pending = new Map<Post, Promise<void>>();
 function ensureEnv(p: Post): Promise<void> {
-  if (p.env) return Promise.resolve();
+  if (p.env && p.loud) return Promise.resolve();
   let job = pending.get(p);
   if (!job) {
-    job = envelope(p.src, N).then((e) => void (p.env = e)).catch(() => {});
+    job = analyze(p.src, N)
+      .then((a) => {
+        p.env ??= a.env;
+        p.loud = { gain: a.gain, start: a.start, end: a.end };
+      })
+      .catch(() => {});
     pending.set(p, job);
   }
   return job;
@@ -102,6 +114,7 @@ function updateBadge() {
     b.hidden = n === 0;
     b.textContent = String(n);
   });
+  setBadge(n);
 }
 
 // =================== лист действий ===================
@@ -265,8 +278,12 @@ async function playAt(i: number) {
   markHeard(cur().post.id);
   updateBadge();
   show();
+  const p = cur().post;
+  // следующие голоса разбираем заранее: громкость готова до того, как они зазвучат
+  for (let k = 1; k <= 2; k++) if (items.length > k) void ensureEnv(items[(qi + k) % items.length].post);
+  void ensureEnv(p).then(() => cur()?.post === p && p.loud && player.setLoudness(p.loud));
   try {
-    await player.play(cur().post.src, rate);
+    await player.play(p.src, rate, p.loud);
     started = true;
   } catch {
     // автозапуск заблокирован — ждём касания
@@ -295,6 +312,7 @@ function show() {
   $("transcript").textContent = p.text ?? t("transcriptPending");
   $("transcript").hidden = true;
   $("live").textContent = `${p.author}: ${p.hook}`;
+  setNowPlaying(p.hook, p.author, artFor(p.author));
   const n = shown(rootOf(cur()).replies).length;
   $("threadCount").textContent = n ? String(n) : "";
   $("laterBtn").classList.toggle("on", isLater(p.id));
@@ -302,8 +320,6 @@ function show() {
   $("heartBtn").querySelector(".ico")!.outerHTML = icon("heart");
   renderReactionCounts();
   visual.setMarks(marksFor(p, !parent));
-  void ensureEnv(p).then(() => {
-  });
   // «гусеница»: пройденные шарики переливаются, текущий светится
   $("segments").innerHTML =
     mode.kind === "radio" ? "" : items.map((_, i) => `<span class="seg${i < qi ? " done" : i === qi ? " now" : ""}"><i></i></span>`).join("");
@@ -346,6 +362,34 @@ function playThread() {
 }
 
 player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && next(), 400));
+
+// =================== экран блокировки и гарнитура ===================
+
+// обложка для экрана блокировки — персонаж автора; рисуется один раз на автора
+const art = new Map<string, string>();
+function artFor(author: string) {
+  let url = art.get(author);
+  if (!url) {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 512;
+    drawRing(cv, undefined, aura(author));
+    url = cv.toDataURL("image/png");
+    art.set(author, url);
+  }
+  return url;
+}
+
+initMediaSession({
+  play: () => player.el.paused && toggle(),
+  pause: () => player.el.pause(),
+  next: () => void next(),
+  prev: () => void prev(),
+  seek: (sec) => (player.el.currentTime = sec),
+});
+player.el.addEventListener("play", () => setPlaybackState("playing"));
+player.el.addEventListener("pause", () => setPlaybackState("paused"));
+player.el.addEventListener("timeupdate", () => setPosition(player.el.duration, player.el.currentTime, player.el.playbackRate));
+audioSession("playback");
 
 (function progress() {
   requestAnimationFrame(progress);
@@ -531,7 +575,10 @@ $("heartBtn").onclick = () => {
   }
 };
 $("heartBtn").onkeydown = (e) => {
-  if (e.key === "ArrowUp") (e.preventDefault(), ($("fan").hidden = false));
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    $("fan").hidden = false;
+  }
 };
 // веер: верхний ряд — эмоции, нижний — ситком-мемы
 const fanRow = (list: readonly Reaction[]) =>
@@ -543,7 +590,7 @@ function renderFan() {
     fanRow(MEMES) +
     (community.length
       ? `<div class="fan-row community">${community
-          .map((c) => `<button data-s="${c.id}" aria-label="${escapeHtml(t("soundAria", { name: c.name }))}" title="${escapeHtml(c.name)}"><span>${c.icon}</span></button>`)
+          .map((c) => `<button data-s="${escapeHtml(c.id)}" aria-label="${escapeHtml(t("soundAria", { name: c.name }))}" title="${escapeHtml(c.name)}"><span>${escapeHtml(c.icon)}</span></button>`)
           .join("")}</div>`
       : "");
 }
@@ -653,7 +700,10 @@ document.addEventListener("keydown", (e) => {
   }
   if (!$("recorder").hidden || $("home").hidden) return;
   if ((e.target as HTMLElement).closest?.("button, [role=button]") && (e.code === "Space" || e.code === "Enter")) return;
-  if (e.code === "Space") (e.preventDefault(), toggle());
+  if (e.code === "Space") {
+    e.preventDefault();
+    toggle();
+  }
   if (e.code === "ArrowRight" || e.code === "ArrowDown") void next();
   if (e.code === "ArrowLeft" || e.code === "ArrowUp") void prev();
   if (e.code === "Escape" && mode.kind !== "radio") leaveQueue();
@@ -926,7 +976,7 @@ function renderMine() {
 function soundRow(c: CommunitySound, text: string, sub: string, buttons: HTMLElement[]) {
   const r = document.createElement("div");
   r.className = "snd-row";
-  r.innerHTML = `<span class="snd-ico">${c.icon}</span><span class="snd-text">${escapeHtml(text)}<small>«${escapeHtml(sub)}»</small></span>`;
+  r.innerHTML = `<span class="snd-ico">${escapeHtml(c.icon)}</span><span class="snd-text">${escapeHtml(text)}<small>«${escapeHtml(sub)}»</small></span>`;
   r.append(...buttons);
   return r;
 }
@@ -1115,11 +1165,20 @@ function renderProfile() {
       setAllowWithoutAsking(!allowsWithoutAsking());
       renderProfile();
     }),
+    ...(installKind() ? [meRow("download", t("install"), openInstall)] : []),
     meRow("ban", t("blockedN", { n: blockedAuthors().length }), openBlocked),
     meRow("trash", t("deleteAll"), confirmDeleteAll, true),
     meRow("x", t("deleteAccount"), confirmDeleteAccount, true),
   );
 }
+
+// установка: Chrome/Android — системный диалог, iPhone — подсказка про «Поделиться»
+async function openInstall() {
+  if (installKind() === "ios") return openSheet(t("install"), t("installIos"), [], t("installSub"));
+  await install();
+  renderProfile();
+}
+onInstallChange(() => view === "me" && renderProfile());
 
 function openBlocked() {
   const names = blockedAuthors();
@@ -1174,6 +1233,8 @@ function confirmDeleteAccount() {
 // =================== запись ===================
 
 const MIN_MS = 1_000;
+const VOICE_LEVEL = 0.08; // уровень визуала, выше которого считаем, что человек говорит
+const SILENCE_STOP_MS = 3_000;
 const HOLD_MS = 350; // дольше — значит держат кнопку, отпускание завершает запись
 
 const recorder = new Recorder();
@@ -1208,6 +1269,7 @@ function openRecorder(to: Post | null, at?: number) {
   $("recWhat").innerHTML = to ? `${icon("reply")}${escapeHtml(to.author)}` : `${icon("mic")}${t("upTo", { n: POST_MS / 1000 })}`;
   reset();
   $("recorder").hidden = false;
+  void warmDenoiser()?.catch(() => {}); // шумодав грузится, пока человек собирается с мыслями
 }
 
 function closeRecorder() {
@@ -1215,9 +1277,21 @@ function closeRecorder() {
     transcript.stop();
     void recorder.stop();
   }
+  micOff();
   preview.el.pause();
   $("recorder").hidden = true;
   if (resumeAfter) void player.el.play().catch(() => {});
+  if (pendingUpdate) offerUpdate(pendingUpdate);
+}
+
+// во время записи: экран не гаснет, iOS держит микрофон и динамик вместе
+function micOn() {
+  audioSession("play-and-record");
+  void keepAwake(true);
+}
+function micOff() {
+  void keepAwake(false);
+  audioSession("playback");
 }
 
 function reset() {
@@ -1256,17 +1330,27 @@ function setTimer(ms: number) {
 }
 
 async function startRec() {
+  micOn();
   try {
     await recorder.start(maxMs, () => void stopRec());
   } catch {
+    micOff();
     setRecState("idle", t("needMic"));
     return;
   }
   setRecState("live");
   transcript.start((t) => ($("recText").textContent = t));
+  // замолчал после того, как начал говорить, — запись заканчивается сама
+  let spoke = false;
+  let lastVoice = performance.now();
   (function tick() {
     if (!recorder.active) return;
-    if (recState === "live") setTimer(performance.now() - recorder.startedAt);
+    const now = performance.now();
+    if (recState === "live") setTimer(now - recorder.startedAt);
+    if ((recorder.level()?.level ?? 0) > VOICE_LEVEL) {
+      spoke = true;
+      lastVoice = now;
+    } else if (spoke && now - lastVoice > SILENCE_STOP_MS) return void stopRec();
     requestAnimationFrame(tick);
   })();
 }
@@ -1276,6 +1360,7 @@ async function stopRec() {
   const dur = performance.now() - recorder.startedAt;
   transcript.stop();
   const blob = await recorder.stop();
+  micOff();
   recVisual.setProgress(0);
   if (dur < MIN_MS) {
     reset();
@@ -1386,10 +1471,37 @@ field.source = () => {
   return { level: 0, out: false, idle: true };
 };
 
+// =================== обновления и ярлыки иконки ===================
+
+// новая версия не перезагружает приложение посреди записи: ждём, пока рекордер закроется
+let pendingUpdate: (() => void) | null = null;
+function offerUpdate(apply: () => void) {
+  if (!$("recorder").hidden) {
+    pendingUpdate = apply;
+    return;
+  }
+  pendingUpdate = null;
+  openSheet(t("updateReady"), "", [{ icon: "rotate", label: t("update"), onClick: apply }]);
+}
+initServiceWorker(offerUpdate, () => toast(t("offlineReady")));
+
+// ярлыки из манифеста: долгое нажатие на иконку → «Записать» или «Ответы»
+function openShortcut() {
+  const go = new URLSearchParams(location.search).get("go");
+  if (!go) return;
+  history.replaceState(null, "", location.pathname);
+  if (go === "record") openRecorder(null);
+  else if (go === "replies") {
+    mineTab = "toMe";
+    showView("mine");
+  }
+}
+
 loadFeed().then((f) => {
   feed = f;
   renderChannels();
   renderStories();
   tuneRadio("foryou", false);
   showView("home");
+  openShortcut();
 });

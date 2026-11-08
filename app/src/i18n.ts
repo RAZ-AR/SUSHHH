@@ -284,6 +284,13 @@ const D: Record<string, Row> = {
   "recOnAir": ["24 hours on air", "24 часа в эфире", "24 Stunden live", "24 horas en emisión", "24 heures à l'antenne"],
   "recLeft": ["{n} s left", "ещё {n} с", "noch {n} s", "quedan {n} s", "encore {n} s"],
   "needMic": ["Microphone access needed", "Нужен доступ к микрофону", "Mikrofonzugriff nötig", "Se necesita acceso al micrófono", "Accès au micro nécessaire"],
+  // приложение на домашнем экране
+  "install": ["Install the app", "Установить приложение", "App installieren", "Instalar la app", "Installer l’app"],
+  "installIos": ["Tap Share, then “Add to Home Screen”", "Нажми «Поделиться», затем «На экран „Домой“»", "Tippe auf „Teilen“, dann „Zum Home-Bildschirm“", "Toca «Compartir» y luego «Añadir a pantalla de inicio»", "Touche « Partager », puis « Sur l’écran d’accueil »"],
+  "installSub": ["Full screen, offline, notifications", "Во весь экран, без сети, с уведомлениями", "Vollbild, offline, Mitteilungen", "Pantalla completa, sin conexión, avisos", "Plein écran, hors ligne, notifications"],
+  "updateReady": ["New version ready", "Есть новая версия", "Neue Version bereit", "Nueva versión lista", "Nouvelle version prête"],
+  "update": ["Update", "Обновить", "Aktualisieren", "Actualizar", "Mettre à jour"],
+  "offlineReady": ["Works offline now", "Теперь работает без сети", "Funktioniert jetzt offline", "Ya funciona sin conexión", "Fonctionne maintenant hors ligne"],
   "tooShort": ["Too short — say a few words", "Слишком коротко — скажи пару слов", "Zu kurz – sag ein paar Worte", "Demasiado corto: di unas palabras", "Trop court — dis quelques mots"],
   "replySent": ["Reply sent", "Ответ отправлен", "Antwort gesendet", "Respuesta enviada", "Réponse envoyée"],
   "onAirNow": ["On air", "В эфире", "Live", "En emisión", "À l'antenne"],

@@ -7,11 +7,23 @@
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "dev:phone": "vite --host --mode phone"
+    "dev:phone": "vite --host --mode phone",
+    "test": "vitest run",
+    "lint": "oxlint src",
+    "icons": "pwa-assets-generator"
   },
   "devDependencies": {
-    "@vitejs/plugin-basic-ssl": "^1.2.0",
-    "typescript": "^5.9.3",
-    "vite": "^6.4.4"
+    "@fontsource/onest": "^5.3.1",
+    "@vite-pwa/assets-generator": "^2.0.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "happy-dom": "^21.0.4",
+    "oxlint": "^1.92.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@sapphi-red/web-noise-suppressor": "^0.4.1"
   }
 }
