@@ -25,6 +25,7 @@ const LINE: Record<string, string> = {
   check: "M5 12l5 5L20 7",
   scissors: "M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.1 7.9 20 20M8.1 16.1 20 4",
   wave: "M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2",
+  next: "M5 5l10 7-10 7zM19 5v14",
   download: "M12 4v11M7 10l5 5 5-5M5 20h14",
   share: "M12 15V4M8 8l4-4 4 4M6 11H5v9h14v-9h-1",
   globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18",

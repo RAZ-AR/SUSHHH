@@ -7,7 +7,7 @@ import { lang, LANGS, setLang, t, tn } from "./i18n";
 import { icon } from "./icons";
 import { isSoundKey, soundByKey } from "./sounds";
 import { drawRing } from "./thumbs";
-import { type Mark, Visual } from "./visual";
+import { Grille, type Mark, Visual } from "./visual";
 import { audioSession, initMediaSession, setNowPlaying, setPlaybackState, setPosition } from "./pwa";
 import { $, closeSheet, openSheet, pauseForSheet, type SheetRow, toast } from "./ui";
 import { ensureEnv, feed, field, RATES, shown } from "./state";
@@ -23,6 +23,8 @@ type Mode = { kind: "radio" } | { kind: "story"; index: number } | { kind: "list
 export const player = new Player();
 export const visual = new Visual($<HTMLCanvasElement>("cv"));
 visual.setSource(player.level);
+// решётка динамика под экраном вспыхивает от того же звука
+new Grille($<HTMLCanvasElement>("grille"), () => visual.level);
 
 let channels: Stream[] = [];
 let channelId = "foryou";
@@ -35,7 +37,20 @@ export let rate = 1.25;
 export function cycleRate() {
   rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
   player.el.playbackRate = rate;
+  showRate();
 }
+let keyPlaying: boolean | null = null;
+const mmss = (s: number) => {
+  const v = Math.max(0, Math.floor(s));
+  return `${String(Math.floor(v / 60)).padStart(2, "0")}:${String(v % 60).padStart(2, "0")}`;
+};
+
+// плашка под экраном: скорость, по нажатию — следующая
+function showRate() {
+  $("rateText").textContent = `×${rate.toLocaleString(lang)}`;
+}
+showRate();
+$("rateBtn").onclick = () => cycleRate();
 export let started = false; // браузер не даст играть звук до первого касания
 let stories: Post[] = [];
 const seen = new Set<string>();
@@ -177,6 +192,8 @@ export function show() {
     st.classList.add(swapDir > 0 ? "swap-next" : "swap-prev");
     swapDir = 0;
   }
+  visual.setEnv(p.env);
+  void ensureEnv(p).then(() => cur()?.post === p && visual.setEnv(p.env));
   $("hook").textContent = p.hook;
   $("hook").classList.remove("open");
   $("transcript").textContent = p.text ?? t("transcriptPending");
@@ -278,8 +295,17 @@ audioSession("playback");
   $("hairFill").style.width = `${(el.ended ? 0 : prog) * 100}%`;
   $("hair").setAttribute("aria-valuenow", String(Math.round(prog * 100)));
   $("startBtn").hidden = started;
-  // персонаж «говорит», пока звучит голос; на паузе и до старта — спит
-  $("orb").classList.toggle("sleep", !started || el.paused);
+  // экран прибора: большое время, длительность, номер голоса в очереди
+  $("timeNow").textContent = mmss(el.ended ? 0 : el.currentTime);
+  $("timeDur").textContent = d ? `/ ${mmss(d)}` : "";
+  $("voiceNo").textContent = `${qi + 1} / ${items.length}`;
+  const playing = !el.paused && !el.ended;
+  if (playing !== keyPlaying) {
+    keyPlaying = playing;
+    $("playWord").textContent = t(playing ? "pauseCaps" : "playCaps");
+    $("playKey").querySelector(".ico")!.outerHTML = icon(playing ? "pause" : "play");
+    $("playKey").setAttribute("aria-label", t(playing ? "pause" : "startAria"));
+  }
 })();
 
 // цвет за диском: размер — по кольцу, пульс — по громкости, вращение быстрее, когда говорят,
@@ -395,6 +421,8 @@ $("stage").addEventListener("pointerup", (e) => {
 // =================== панель ===================
 
 $("thread").onclick = playThread;
+$("playKey").onclick = () => (started ? toggle() : void playAt(qi));
+$("nextKey").onclick = () => void next();
 $("startBtn").onclick = (e) => {
   e.stopPropagation();
   void playAt(qi);

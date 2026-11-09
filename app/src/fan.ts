@@ -7,7 +7,7 @@ import { MEMES, playReaction, type Reaction, REACTIONS } from "./reactions";
 import { authorAllows, type CommunitySound, countUse, createSound, durationOf, liveSounds, MAX_DUR, playClip, setStatus, SOUND_ICONS, soundKey, wordsAt } from "./sounds";
 import { $, clock, closeSheet, escapeHtml, openSheet, toast } from "./ui";
 import { feed, field } from "./state";
-import { calm, cur, marksFor, player, progressNow, visual } from "./air";
+import { cur, marksFor, player, progressNow, visual } from "./air";
 
 // =================== реакции ===================
 
@@ -62,7 +62,8 @@ const MOOD: Record<string, string> = {
 };
 let moodTimer = 0;
 function emote(mood: string) {
-  const orb = $("orb");
+  const orb = document.getElementById("orb");
+  if (!orb) return;
   orb.classList.remove("happy", "laugh", "wow", "sad", "meh");
   void orb.offsetWidth;
   orb.classList.add(mood);
@@ -70,15 +71,7 @@ function emote(mood: string) {
   moodTimer = window.setTimeout(() => orb.classList.remove(mood), 1400);
 }
 
-// персонаж поглядывает по сторонам, пока говорит; в тишине смотрит прямо
-setInterval(() => {
-  const talking = !player.el.paused && !calm;
-  const r = visual.ringRadiusCss;
-  const lx = talking ? (Math.random() - 0.5) * r * 0.22 : 0;
-  const ly = talking ? (Math.random() - 0.5) * r * 0.12 : 0;
-  $("orb").style.setProperty("--lx", `${lx.toFixed(1)}px`);
-  $("orb").style.setProperty("--ly", `${ly.toFixed(1)}px`);
-}, 2200);
+// персонажа на экране больше нет: голос виден в волне
 
 function float(r: string, big = false) {
   const s = document.createElement("span");

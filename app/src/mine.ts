@@ -51,6 +51,7 @@ export function renderMine() {
   const thumb = $<HTMLCanvasElement>("meThumb");
   queueMicrotask(() => drawRing(thumb, undefined, aura(me())));
   const fresh = freshToMe();
+  $("mineSpec").textContent = `${me().toUpperCase()}\n${t("mineSpec", { n: fresh.length, l: laterIds().length })}`;
   $("playNewText").textContent = fresh.length ? tn("newReplies", fresh.length) : t("noNew");
   $("playNew").classList.toggle("quiet", !fresh.length);
   $("playNew").classList.toggle("dark", !!fresh.length);

@@ -2,12 +2,11 @@
 
 import { analyze } from "./audio";
 import { type Post, unheardToMe, visible } from "./feed";
-import { look } from "./look";
 import { Field } from "./bokeh";
 import { N } from "./visual";
 
 // вид «боке»: облако точек во весь экран, позади всего интерфейса
-export const field = new Field(() => look === "bokeh");
+export const field = new Field(() => false);
 
 export const POST_MS = 30_000;
 export const REPLY_MS = 15_000;

@@ -83,6 +83,8 @@ function reset() {
   take = null;
   recVisual.setMarks([]);
   recVisual.setProgress(0);
+  recVisual.setEnv(null);
+  recVisual.setMode("rec");
   setRecState("idle");
 }
 
@@ -146,6 +148,7 @@ async function stopRec() {
   const blob = await recorder.stop();
   micOff();
   recVisual.setProgress(0);
+  recVisual.setMode("play");
   if (dur < MIN_MS) {
     reset();
     setRecState("idle", t("tooShort"));
@@ -158,6 +161,7 @@ async function stopRec() {
     // формат не декодируется — формы не будет, запись всё равно сохраним
   }
   take = { blob, text: transcript.text, env };
+  recVisual.setEnv(env);
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = URL.createObjectURL(blob);
   setRecState("done");
@@ -189,11 +193,12 @@ preview.el.addEventListener("pause", () => setIcon($("listenBack"), "play"));
 (function previewProgress() {
   if (!$("recorder").hidden) {
     glow($("recStage"), recVisual);
-    // слушает, пока ты говоришь или пока звучит дубль; иначе дремлет
-    $("recOrb").classList.toggle("sleep", !recorder.active && preview.el.paused);
   }
   const d = preview.el.duration;
-  if (take && d && isFinite(d) && !preview.el.paused) $("recHairFill").style.width = `${(preview.el.currentTime / d) * 100}%`;
+  if (take && d && isFinite(d) && !preview.el.paused) {
+    $("recHairFill").style.width = `${(preview.el.currentTime / d) * 100}%`;
+    recVisual.setProgress(preview.el.currentTime / d);
+  }
   requestAnimationFrame(previewProgress);
 })();
 

@@ -1,7 +1,7 @@
 // Иконки PWA из public/logo.svg: `npx pwa-assets-generator`
 import { defineConfig, minimal2023Preset } from "@vite-pwa/assets-generator/config";
 
-const bg = { resizeOptions: { background: "#E8EDF4" } };
+const bg = { resizeOptions: { background: "#E9E9E6" } };
 
 export default defineConfig({
   headLinkOptions: { preset: "2023" },

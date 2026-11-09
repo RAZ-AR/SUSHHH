@@ -2,7 +2,7 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-const LIGHT = "#E8EDF4";
+const LIGHT = "#E9E9E6";
 // GitHub Pages отдаёт сайт из подпапки /SUSHHH/: BASE=/SUSHHH/ npm run build
 const base = process.env.BASE ?? "/";
 
@@ -40,7 +40,7 @@ const pwa = VitePWA({
   },
   workbox: {
     // + демо-голоса (≈1 МБ) и основные начертания шрифта: эфир играет даже в первый офлайн-запуск
-    globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/onest-{latin,cyrillic}-*-normal-*.woff2"],
+    globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/{inter-tight,jetbrains-mono}-{latin,cyrillic}-*-normal-*.woff2"],
     navigateFallback: `${base}index.html`,
     cleanupOutdatedCaches: true,
     runtimeCaching: [

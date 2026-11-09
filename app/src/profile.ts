@@ -8,7 +8,8 @@ import { look, LOOKS, setLook } from "./look";
 import { allowsWithoutAsking, setAllowWithoutAsking } from "./sounds";
 import { install, installKind, onInstallChange } from "./pwa";
 import { $, closeSheet, escapeHtml, openSheet, toast } from "./ui";
-import { feed, field, freshToMe, shown } from "./state";
+import { feed, freshToMe, shown } from "./state";
+import { drawRing } from "./thumbs";
 import { showView, view } from "./nav";
 import { cycleRate, openLanguages, rate, renderChannels, renderStories } from "./air";
 import { renderMine } from "./mine";
@@ -24,16 +25,18 @@ export function paintMe() {
   document.documentElement.style.setProperty("--me1", hsl(mine[0], 1, 72));
   document.documentElement.style.setProperty("--me2", hsl(mine[1], 1, 76));
   paintAura($("meStage"), mine);
+  queueMicrotask(() => drawRing($<HTMLCanvasElement>("meDisc"), undefined, mine));
 }
 
 // персонаж в кабинете: коснулся — улыбнулся
 let meMoodTimer = 0;
 function greet() {
-  if (look === "bokeh") field.burst(40); // в «боке» сфера отвечает всплеском точек
-  const orb = $("meOrb");
-  orb.classList.add("happy");
+  const disc = $("meStage");
+  disc.classList.remove("ping");
+  void disc.offsetWidth;
+  disc.classList.add("ping");
   clearTimeout(meMoodTimer);
-  meMoodTimer = window.setTimeout(() => orb.classList.remove("happy"), 1400);
+  meMoodTimer = window.setTimeout(() => disc.classList.remove("ping"), 900);
 }
 $("meStage").onclick = greet;
 $("meStage").onkeydown = (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), greet());
@@ -78,6 +81,7 @@ function meSwitch(label: string, on: boolean, onToggle: () => void) {
 
 export function renderProfile() {
   $("meName").textContent = me();
+  queueMicrotask(() => drawRing($<HTMLCanvasElement>("meDisc"), undefined, aura(me())));
   const posts = shown(myPosts(feed));
   const replies = freshToMe().length + repliesToMe(feed).filter((x) => isHeard(x.reply.id)).length;
   const reacts = posts.reduce((sum, p) => sum + reactionCount(p), 0);
