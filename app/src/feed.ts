@@ -140,13 +140,13 @@ function seedMoments(id: string, reactions: Record<string, number> | undefined):
 function fromSeed(s: Seed): Post {
   const post: Post = {
     id: s.id, author: s.author ?? me(), mine: !s.author, createdAt: s.createdAt, hook: s.hook, text: s.text, tags: s.tags,
-    palette: s.palette, src: `/seed/${s.file}.m4a`, synthetic: true, reactions: { ...s.reactions },
+    palette: s.palette, src: `${import.meta.env.BASE_URL}seed/${s.file}.m4a`, synthetic: true, reactions: { ...s.reactions },
     moments: seedMoments(s.id, s.reactions), replies: [],
   };
   post.replies = (s.replies ?? [])
     .map((r) => ({
       id: r.id, author: r.author ?? me(), mine: !r.author, createdAt: r.createdAt, text: r.text, hook: hookFrom(r.text, t("replyFallback")),
-      tags: [], palette: s.palette, src: `/seed/${r.file}.m4a`, synthetic: true, reactions: { ...r.reactions },
+      tags: [], palette: s.palette, src: `${import.meta.env.BASE_URL}seed/${r.file}.m4a`, synthetic: true, reactions: { ...r.reactions },
       moments: seedMoments(r.id, r.reactions), at: REPLY_AT[r.id], replies: [],
     }))
     .sort((a, b) => a.createdAt - b.createdAt);
@@ -403,6 +403,8 @@ export function storedToPost(s: Stored): Post {
   };
 }
 
+const REAL_ENOUGH = 5;
+
 const withTimeout = <T>(p: Promise<T>, ms: number) =>
   Promise.race([p.catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), ms))]);
 
@@ -467,6 +469,10 @@ export async function loadFeed(): Promise<Post[]> {
       if (!p || x.user_id === uid) continue; // свои реакции уже посчитаны из локальных
       p.reactions[x.emoji] = (p.reactions[x.emoji] ?? 0) + 1;
       p.moments.push({ emoji: x.emoji, at: x.at });
+    }
+    // живых голосов уже хватает на эфир — демо-записи убираем, чтобы не путать участников
+    if (remote.posts.filter((r) => !r.reply_to).length >= REAL_ENOUGH) {
+      for (let i = feed.length - 1; i >= 0; i--) if (feed[i].synthetic) feed.splice(i, 1);
     }
     const sent = new Set(remote.posts.map((r) => r.id));
     for (const s of mine) if (!sent.has(s.id)) void publishRecording(s);

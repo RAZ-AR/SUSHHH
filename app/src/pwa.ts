@@ -93,7 +93,7 @@ export function setNowPlaying(title: string, artist: string, artwork?: string) {
     title,
     artist,
     album: "SUSHHH",
-    artwork: artwork ? [{ src: artwork, sizes: "512x512", type: "image/png" }] : [{ src: "/pwa-512x512.png", sizes: "512x512", type: "image/png" }],
+    artwork: artwork ? [{ src: artwork, sizes: "512x512", type: "image/png" }] : [{ src: `${import.meta.env.BASE_URL}pwa-512x512.png`, sizes: "512x512", type: "image/png" }],
   });
 }
 

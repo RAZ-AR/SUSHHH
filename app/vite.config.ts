@@ -3,6 +3,8 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 const LIGHT = "#E8EDF4";
+// GitHub Pages отдаёт сайт из подпапки /SUSHHH/: BASE=/SUSHHH/ npm run build
+const base = process.env.BASE ?? "/";
 
 // PWA: манифест, иконки, ярлыки и service worker (Workbox).
 // Оболочка — в precache: открывается мгновенно и без сети.
@@ -12,12 +14,12 @@ const pwa = VitePWA({
   injectRegister: false, // регистрирует src/pwa.ts
   includeAssets: ["favicon.ico", "apple-touch-icon-180x180.png", "logo.svg"],
   manifest: {
-    id: "/",
+    id: base,
     name: "SUSHHH — voices you listen to",
     short_name: "SUSHHH",
     description: "Live voices, one after another. Listen and reply with your voice.",
-    start_url: "/",
-    scope: "/",
+    start_url: base,
+    scope: base,
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     orientation: "portrait",
@@ -32,14 +34,14 @@ const pwa = VitePWA({
     ],
     // долгое нажатие на иконку (Android, десктоп)
     shortcuts: [
-      { name: "Record", short_name: "Record", url: "/?go=record", icons: [{ src: "pwa-192x192.png", sizes: "192x192" }] },
-      { name: "Replies", short_name: "Replies", url: "/?go=replies", icons: [{ src: "pwa-192x192.png", sizes: "192x192" }] },
+      { name: "Record", short_name: "Record", url: `${base}?go=record`, icons: [{ src: "pwa-192x192.png", sizes: "192x192" }] },
+      { name: "Replies", short_name: "Replies", url: `${base}?go=replies`, icons: [{ src: "pwa-192x192.png", sizes: "192x192" }] },
     ],
   },
   workbox: {
     // + демо-голоса (≈1 МБ) и основные начертания шрифта: эфир играет даже в первый офлайн-запуск
     globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/onest-{latin,cyrillic}-*-normal-*.woff2"],
-    navigateFallback: "/index.html",
+    navigateFallback: `${base}index.html`,
     cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
@@ -63,5 +65,6 @@ const pwa = VitePWA({
 
 // `npm run dev:phone` — HTTPS в локальной сети: без него телефон не даст доступ к микрофону
 export default defineConfig(({ mode }) => ({
+  base,
   plugins: [pwa, ...(mode === "phone" ? [basicSsl()] : [])],
 }));
