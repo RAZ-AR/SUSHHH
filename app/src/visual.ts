@@ -24,6 +24,9 @@ export class Visual {
   private flashes: { at: number; t0: number }[] = [];
   private shape: ArrayLike<number> | null = null;
   private mode: "play" | "rec" = "play";
+  private signAt = -1; // место крестика в сетке плюсов (0..7); −1 — знака нет
+  private signCol = "";
+  private search = false;
   private hist: number[] = [];
   private lastSample = 0;
   private w = 0;
@@ -51,6 +54,17 @@ export class Visual {
 
   // аура больше не красит экран: голос узнаётся по волне. Оставлено для совместимости вызовов
   setAura(_a: Aura) {}
+
+  // личный знак говорящего: крестик на своём месте в сетке плюсов, своего цвета
+  setSign(at: number, color: string) {
+    this.signAt = at;
+    this.signCol = color;
+  }
+
+  // стрелку шкалы ведут: вместо записи — шум эфира
+  setSearching(on: boolean) {
+    this.search = on;
+  }
 
   // форма записи (огибающая 0..1); без неё — пунктир, пока запись разбирается
   setEnv(e: ArrayLike<number> | null | undefined) {
@@ -111,8 +125,9 @@ export class Visual {
     paintScreen(ctx, W, H, d);
 
     // печатная графика: сетка плюсов с одним крестиком и три кольца — тихо, цветом «faint»
-    plusGrid(ctx, W - 104 * d, 54 * d, 4, 2, 20 * d, 5 * d, c.faint, d);
-    ringTrio(ctx, W - 26 * d, H - 118 * d, 8 * d, 22 * d, c.faint, d);
+    plusGrid(ctx, W - 80 * d, 46 * d, 4, 2, 20 * d, 5 * d, c.faint, d, this.signAt >> 2, this.signAt < 0 ? -1 : this.signAt & 3, this.signCol || c.faint);
+    // три кольца — только на экране записи: в эфире это место занято именем говорящего
+    if (this.mode === "rec") ringTrio(ctx, W - 26 * d, H - 118 * d, 8 * d, 22 * d, c.faint, d);
 
     const x0 = 18 * d;
     const x1 = W - 18 * d;
@@ -133,6 +148,16 @@ export class Visual {
       }
       ticks(ctx, head + step, x1, cy, step, c.faint, d);
       if (n) playhead(ctx, head, cy - maxH * 0.62, cy + maxH * 0.62, d);
+      return;
+    }
+
+    if (this.search) {
+      // поиск: столбики дрожат вместе с шумом и обрывками голосов
+      ctx.fillStyle = c.dim;
+      for (let x = x0; x <= x1; x += 6 * d) {
+        const bh = Math.max(2 * d, (0.08 + Math.random() * (0.25 + this.env * 0.6)) * maxH);
+        ctx.fillRect(Math.round(x - d), Math.round(cy - bh / 2), 2 * d, Math.round(bh));
+      }
       return;
     }
 
@@ -217,14 +242,14 @@ function ticks(ctx: CanvasRenderingContext2D, from: number, to: number, cy: numb
   for (let x = from; x < to; x += step) ctx.fillRect(Math.round(x), cy - 3 * d, d, 6 * d);
 }
 
-export function plusGrid(ctx: CanvasRenderingContext2D, x: number, y: number, cols: number, rows: number, gap: number, s: number, col: string, d: number, xr = 1, xc = 2) {
-  ctx.strokeStyle = col;
+export function plusGrid(ctx: CanvasRenderingContext2D, x: number, y: number, cols: number, rows: number, gap: number, s: number, col: string, d: number, xr = 1, xc = 2, xcol = col) {
   ctx.lineWidth = 1.6 * d;
   ctx.lineCap = "round";
   for (let r = 0; r < rows; r++)
     for (let k = 0; k < cols; k++) {
       const px = x + k * gap;
       const py = y + r * gap;
+      ctx.strokeStyle = r === xr && k === xc ? xcol : col;
       ctx.beginPath();
       if (r === xr && k === xc) {
         const q = s * 0.7;

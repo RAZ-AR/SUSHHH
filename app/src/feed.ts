@@ -2,7 +2,7 @@
 // реакции, потоки и рейтинг обсуждаемости для сторис.
 
 import type { Loudness } from "./audio";
-import { audioUrl, connect, eraseAccount, fetchFeed, myUid, publish, removePost, rename, sendReaction, sendReport, type RemotePost } from "./backend";
+import { audioUrl, connect, eraseAccount, fetchFeed, myUid, online, publish, removePost, rename, sendReaction, sendReport, type RemoteFeed, type RemotePost } from "./backend";
 import { t } from "./i18n";
 
 export type Post = {
@@ -16,6 +16,7 @@ export type Post = {
   palette: number;
   synthetic?: boolean;
   mine?: boolean; // запись текущего пользователя
+  unsent?: boolean; // моя запись ещё не ушла в общий эфир (ждёт сети)
   env?: ArrayLike<number>; // огибающая для «портрета»
   loud?: Loudness; // выравнивание громкости и края тишины — считаются при первом разборе
   reactions: Record<string, number>;
@@ -24,7 +25,7 @@ export type Post = {
   replies: Post[];
 };
 
-export type Moment = { at: number; emoji: string };
+export type Moment = { at: number; emoji: string; mine?: boolean }; // mine — поставил я: в «зале» свои реакции не повторяются
 
 const H = 3600_000;
 const M = 60_000;
@@ -108,6 +109,25 @@ const SEED: Seed[] = [
       { id: "r12", author: "радуга", createdAt: now - 3 * H, file: "r12", text: "Я сегодня увидела радугу над Араратом. Прямо из окна автобуса." },
     ],
   },
+  // демо-слухи: о местах и событиях, живут сутки, держатся на «верю» / «не верю»
+  {
+    id: "q1", author: "лёгкий_ветер", createdAt: now - 10 * H, palette: 2, file: "r15",
+    hook: "Говорят, на Каскаде по вечерам живая музыка",
+    text: "Поддержу про Каскад. Там по вечерам ещё бывает живая музыка.",
+    tags: ["слух"], reactions: { "✓": 12, "✗": 3, "🔥": 3 },
+  },
+  {
+    id: "q2", author: "книжная_пыль", createdAt: now - 4 * H, palette: 4, file: "r7",
+    hook: "Есть книжная кофейня на Абовяна, где сидят часами",
+    text: "Есть маленькая книжная кофейня на Абовяна. Там можно сидеть часами.",
+    tags: ["слух"], reactions: { "✓": 5, "✗": 1 },
+  },
+  {
+    id: "q3", author: "радуга", createdAt: now - 21 * H, palette: 0, file: "r12",
+    hook: "Радуга над Араратом — видно прямо из автобуса",
+    text: "Я сегодня увидела радугу над Араратом. Прямо из окна автобуса.",
+    tags: ["слух"], reactions: { "✓": 31, "✗": 2, "😮": 5 },
+  },
 ];
 
 // демо: на какой момент исходной записи отвечает каждый ответ
@@ -164,12 +184,17 @@ export type Stored = {
   at?: number; // момент исходной записи, на который отвечает
   text?: string;
   env?: number[];
+  tags?: string[];
+  sent?: boolean; // уже в общем эфире
 };
 
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open("sushhh", 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("posts", { keyPath: "id" });
+    const r = indexedDB.open("sushhh", 2);
+    // posts — мои записи; emo — мои секундные звуки для пэдов эмоций
+    r.onupgradeneeded = () => {
+      for (const name of ["posts", "emo"]) if (!r.result.objectStoreNames.contains(name)) r.result.createObjectStore(name, { keyPath: "id" });
+    };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
   });
@@ -198,6 +223,33 @@ async function loadRecordings(): Promise<Stored[]> {
   }
 }
 
+// --- свои звуки эмоций: секунда моего голоса на пэд ---
+
+export type EmoSample = { id: string; blob: Blob };
+
+export async function saveEmo(s: EmoSample) {
+  const d = await db();
+  await new Promise<void>((resolve, reject) => {
+    const tx = d.transaction("emo", "readwrite");
+    tx.objectStore("emo").put(s);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function loadEmo(): Promise<EmoSample[]> {
+  try {
+    const d = await db();
+    return await new Promise((resolve, reject) => {
+      const r = d.transaction("emo").objectStore("emo").getAll();
+      r.onsuccess = () => resolve(r.result as EmoSample[]);
+      r.onerror = () => reject(r.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
 // --- реакции: свои хранятся локально вместе с моментом записи ---
 
 const REACT_KEY = "sushhh.reactions.v2";
@@ -212,7 +264,7 @@ function myReactions(): Record<string, [string, number][]> {
 
 export function addReaction(p: Post, emoji: string, at: number) {
   p.reactions[emoji] = (p.reactions[emoji] ?? 0) + 1;
-  p.moments.push({ emoji, at });
+  p.moments.push({ emoji, at, mine: true });
   sendReaction(p.id, emoji, at);
   const all = myReactions();
   (all[p.id] ??= []).push([emoji, at]);
@@ -313,6 +365,7 @@ export function report(id: string, reason: ReportReason) {
 export async function deleteRecording(id: string) {
   hidePost(id); // демо-записи «моих» постов удалить нельзя — просто прячем
   revokeBlob(id);
+  minePosts.delete(id);
   void removePost(id).catch(() => {});
   try {
     const d = await db();
@@ -395,23 +448,60 @@ function revokeBlob(id: string) {
   blobUrls.delete(id);
 }
 
+// мои записи с этого устройства — по ним снимаем пометку «не отправлено»
+const minePosts = new Map<string, Post>();
+
 export function storedToPost(s: Stored): Post {
-  return {
-    id: s.id, author: me(), mine: true, createdAt: s.createdAt, palette: s.palette, src: blobUrl(s.id, s.blob),
+  const post: Post = {
+    id: s.id, author: me(), mine: true, unsent: !s.sent, createdAt: s.createdAt, palette: s.palette, src: blobUrl(s.id, s.blob),
     hook: hookFrom(s.text, t(s.replyTo ? "yourReply" : "yourPost")), text: s.text, env: s.env, at: s.at,
-    tags: s.replyTo ? [] : ["моё"], reactions: {}, moments: [], replies: [],
+    tags: s.replyTo ? [] : ["моё", ...(s.tags ?? [])], reactions: {}, moments: [], replies: [],
   };
+  minePosts.set(s.id, post);
+  return post;
 }
 
 const REAL_ENOUGH = 5;
 
-const withTimeout = <T>(p: Promise<T>, ms: number) =>
-  Promise.race([p.catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), ms))]);
+// --- очередь отправки: запись лежит на устройстве, пока не уйдёт в общий эфир ---
 
-// своя запись → в общий эфир; без сети просто останется в очереди до следующего запуска
-export function publishRecording(s: Stored) {
-  return publish({ id: s.id, blob: s.blob, replyTo: s.replyTo, at: s.at, text: s.text, env: s.env, palette: s.palette, tags: [] }, me()).catch(() => false);
+function publishRecording(s: Stored) {
+  return publish({ id: s.id, blob: s.blob, replyTo: s.replyTo, at: s.at, text: s.text, env: s.env, palette: s.palette, tags: s.tags ?? [] }, me()).catch(() => false);
 }
+
+const remoteIds = new Set<string>(); // что уже точно есть на сервере
+const sentListeners = new Set<() => void>();
+export const onSent = (f: () => void) => sentListeners.add(f);
+
+async function flushOnce(): Promise<boolean> {
+  if (!online() || !navigator.onLine) return false;
+  let all = true;
+  let changed = false;
+  for (const s of await loadRecordings()) {
+    if (s.sent) continue;
+    if (!remoteIds.has(s.id) && !(await publishRecording(s))) {
+      all = false;
+      continue;
+    }
+    await saveRecording({ ...s, sent: true }).catch(() => {});
+    const post = minePosts.get(s.id);
+    if (post) post.unsent = false;
+    changed = true;
+  }
+  if (changed) sentListeners.forEach((f) => f());
+  return all;
+}
+
+// отправить всё неотправленное; вызовы идут по очереди, чтобы один голос не уходил дважды.
+// true — очередь пуста
+let flushing: Promise<boolean> = Promise.resolve(true);
+export function flushQueue(): Promise<boolean> {
+  flushing = flushing.then(flushOnce, flushOnce);
+  return flushing;
+}
+
+// можно ли отправить прямо сейчас: вход выполнен и сеть есть
+export const canSend = () => online() && navigator.onLine;
 
 export function remoteToPost(r: RemotePost): Post {
   const mine = r.author_id === myUid();
@@ -436,13 +526,10 @@ export function addRemotePost(feed: Post[], r: RemotePost): { post: Post; root: 
   return { post, root: parent };
 }
 
+// лента с устройства: демо-записи, свои записи и свои реакции. Общий эфир подмешивает syncRemote
 export async function loadFeed(): Promise<Post[]> {
   const feed = SEED.map(fromSeed);
-  const byId = new Map<string, Post>();
-  for (const p of feed) {
-    byId.set(p.id, p);
-    for (const r of p.replies) byId.set(r.id, r);
-  }
+  const byId = indexFeed(feed);
 
   const mine = (await loadRecordings()).sort((a, b) => a.createdAt - b.createdAt);
   for (const s of mine) {
@@ -453,40 +540,58 @@ export async function loadFeed(): Promise<Post[]> {
     else if (!s.replyTo) feed.unshift(post);
   }
 
-  // общий эфир: чужие голоса и реакции; свои неотправленные записи уходят на сервер (очередь без сети)
-  const remote = await withTimeout(connect(me()).then((ok) => (ok ? fetchFeed() : null)), 5000);
-  if (remote) {
-    for (const r of [...remote.posts].reverse()) {
-      if (byId.has(r.id)) continue; // своя запись уже есть локально — играем из памяти
-      const post = remoteToPost(r);
-      byId.set(post.id, post);
-      if (!r.reply_to) feed.unshift(post);
-      else byId.get(r.reply_to)?.replies.push(post);
-    }
-    const uid = myUid();
-    for (const x of remote.reactions) {
-      const p = byId.get(x.post_id);
-      if (!p || x.user_id === uid) continue; // свои реакции уже посчитаны из локальных
-      p.reactions[x.emoji] = (p.reactions[x.emoji] ?? 0) + 1;
-      p.moments.push({ emoji: x.emoji, at: x.at });
-    }
-    // живых голосов уже хватает на эфир — демо-записи убираем, чтобы не путать участников
-    if (remote.posts.filter((r) => !r.reply_to).length >= REAL_ENOUGH) {
-      for (let i = feed.length - 1; i >= 0; i--) if (feed[i].synthetic) feed.splice(i, 1);
-    }
-    const sent = new Set(remote.posts.map((r) => r.id));
-    for (const s of mine) if (!sent.has(s.id)) void publishRecording(s);
-  }
-
   for (const [id, list] of Object.entries(myReactions())) {
     const p = byId.get(id);
     if (!p || !Array.isArray(list)) continue;
     for (const [emoji, at] of list) {
       p.reactions[emoji] = (p.reactions[emoji] ?? 0) + 1;
-      p.moments.push({ emoji, at });
+      p.moments.push({ emoji, at, mine: true });
     }
   }
   return feed;
+}
+
+function indexFeed(feed: Post[]) {
+  const byId = new Map<string, Post>();
+  for (const p of feed) {
+    byId.set(p.id, p);
+    for (const r of p.replies) byId.set(r.id, r);
+  }
+  return byId;
+}
+
+// чужие голоса и реакции встают в уже показанную ленту; вызывается один раз за запуск
+export function mergeRemote(feed: Post[], remote: RemoteFeed, uid: string | null, toPost: (r: RemotePost) => Post = remoteToPost) {
+  const byId = indexFeed(feed);
+  for (const r of [...remote.posts].reverse()) {
+    if (byId.has(r.id)) continue; // своя запись уже есть локально — играем из памяти
+    const post = toPost(r);
+    byId.set(post.id, post);
+    if (!r.reply_to) feed.unshift(post);
+    else byId.get(r.reply_to)?.replies.push(post);
+  }
+  for (const x of remote.reactions) {
+    const p = byId.get(x.post_id);
+    if (!p || x.user_id === uid) continue; // свои реакции уже посчитаны из локальных
+    p.reactions[x.emoji] = (p.reactions[x.emoji] ?? 0) + 1;
+    p.moments.push({ emoji: x.emoji, at: x.at });
+  }
+  // живых голосов уже хватает на эфир — демо-записи убираем, чтобы не путать участников
+  if (remote.posts.filter((r) => !r.reply_to).length >= REAL_ENOUGH) {
+    for (let i = feed.length - 1; i >= 0; i--) if (feed[i].synthetic) feed.splice(i, 1);
+  }
+}
+
+// общий эфир: вход, чужие голоса и реакции, затем отправка своей очереди.
+// false — не вышло (нет сети, сервер молчит): вызывающий пробует снова
+export async function syncRemote(feed: Post[]): Promise<boolean> {
+  if (!(await connect(me()))) return false;
+  const remote = await fetchFeed().catch(() => null);
+  if (!remote) return false;
+  mergeRemote(feed, remote, myUid());
+  for (const r of remote.posts) remoteIds.add(r.id);
+  void flushQueue();
+  return true;
 }
 
 // --- обсуждаемость и потоки ---
@@ -504,19 +609,70 @@ export function mostDiscussed(feed: Post[], n = 6) {
   return [...feed].filter((p) => p.replies.length > 0).sort((a, b) => discussion(b) - discussion(a)).slice(0, n);
 }
 
-export type Stream = { id: string; title: string; posts: Post[] };
+// --- диапазоны приёмника: город, свои, слухи ---
 
-export function streams(feed: Post[]): Stream[] {
-  const has = (...tags: string[]) => (p: Post) => p.tags.some((t) => tags.includes(t));
-  const list: Stream[] = [
-    { id: "foryou", title: t("chan.foryou"), posts: forYou(feed) },
-    { id: "new", title: t("chan.new"), posts: [...feed].sort((a, b) => b.createdAt - a.createdAt) },
-    { id: "qod", title: t("chan.qod"), posts: feed.filter(has("вопрос дня")).flatMap((p) => [p, ...p.replies]) },
-    { id: "confess", title: t("chan.confess"), posts: feed.filter(has("признание", "мысль", "настроение")) },
-    { id: "stories", title: t("chan.stories"), posts: feed.filter(has("история", "юмор")) },
-    { id: "city", title: t("chan.city"), posts: feed.filter(has("город", "вопрос")) },
-  ];
-  return list.filter((s) => s.posts.length > 0);
+export type Band = "city" | "own" | "rumor";
+export const BANDS: Band[] = ["city", "own", "rumor"];
+
+// слух — запись о месте или событии: живёт сутки, держится на «верю» / «не верю»
+export const RUMOR_TAG = "слух";
+export const RUMOR_YES = "✓";
+export const RUMOR_NO = "✗";
+const RUMOR_MS = 24 * H;
+export const isRumor = (p: Post) => p.tags.includes(RUMOR_TAG);
+export const rumorHoursLeft = (p: Post, at = Date.now()) => Math.max(0, Math.ceil((p.createdAt + RUMOR_MS - at) / H));
+export const rumorVotes = (p: Post) => ({ yes: p.reactions[RUMOR_YES] ?? 0, no: p.reactions[RUMOR_NO] ?? 0 });
+
+// saved — авторы на клавишах памяти
+export function bandPosts(feed: Post[], band: Band, saved: readonly string[], at = Date.now()): Post[] {
+  if (band === "rumor") {
+    const score = (p: Post) => rumorVotes(p).yes - rumorVotes(p).no;
+    return feed.filter((p) => isRumor(p) && rumorHoursLeft(p, at) > 0).sort((a, b) => score(b) - score(a) || b.createdAt - a.createdAt);
+  }
+  if (band === "own") {
+    const mineToo = feed.flatMap((p) => [p, ...p.replies]);
+    return mineToo.filter((p) => !p.mine && saved.includes(p.author)).sort((a, b) => b.createdAt - a.createdAt);
+  }
+  return forYou(feed.filter((p) => !isRumor(p)));
+}
+
+// сигнал записи: чем больше ей отвечают и реагируют, тем дальше она слышна.
+// bars — деления индикатора (1..5), radius — 0 квартал, 1 район, 2 город, 3 все города
+export function signalOf(p: Post) {
+  const score = discussion(p);
+  return {
+    bars: 1 + [3, 8, 16, 30].filter((x) => score >= x).length,
+    radius: score >= 40 ? 3 : score >= 15 ? 2 : score >= 5 ? 1 : 0,
+  };
+}
+
+// --- клавиши памяти M1–M4: сохранённые голоса (по псевдониму), хранятся на устройстве ---
+
+const MEM_KEY = "sushhh.memory";
+const MEM_SIZE = 4;
+function readMemory(): (string | null)[] {
+  let v: unknown = null;
+  try {
+    v = JSON.parse(localStorage.getItem(MEM_KEY) ?? "null");
+  } catch {
+    // без хранилища память пуста
+  }
+  const list = Array.isArray(v) ? v : [];
+  return Array.from({ length: MEM_SIZE }, (_, i) => (typeof list[i] === "string" ? (list[i] as string) : null));
+}
+let mem = readMemory();
+
+export const memory = (): readonly (string | null)[] => mem;
+export const savedAuthors = () => mem.filter((x): x is string => !!x);
+
+// один голос — одна клавиша: с прежней он снимается
+export function setMemory(i: number, author: string) {
+  mem = mem.map((x, k) => (k === i ? author : x === author ? null : x));
+  try {
+    localStorage.setItem(MEM_KEY, JSON.stringify(mem));
+  } catch {
+    // без хранилища память живёт до перезагрузки
+  }
 }
 
 // лента v0 из концепции: свежие и обсуждаемые через одну, без повторов

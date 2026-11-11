@@ -1,9 +1,10 @@
-// Эфир: плеер, очередь, каналы, сторис, кольцо, жесты, панель и лист «⋯».
+// Эфир: плеер, очередь, диапазоны и шкала, экран, жесты, панель и лист «⋯».
 
 import { Player } from "./audio";
-import { blockAuthor, deleteRecording, hidePost, isLater, markHeard, type Moment, mostDiscussed, type Post, report, type ReportReason, type Stream, streams, toggleLater, visible } from "./feed";
-import { aura, auraGradient, paintAura } from "./aura";
-import { lang, LANGS, setLang, t, tn } from "./i18n";
+import { type Band, bandPosts, blockAuthor, deleteRecording, hidePost, isLater, isRumor, markHeard, type Moment, type Post, reactionCount, report, type ReportReason, RUMOR_NO, RUMOR_YES, rumorHoursLeft, rumorVotes, savedAuthors, signalOf, toggleLater, visible } from "./feed";
+import { aura, voiceColor, voiceCross } from "./aura";
+import { click, initDial, searching, setIndex, setStations, travel } from "./dial";
+import { lang, LANGS, setLang, t } from "./i18n";
 import { icon } from "./icons";
 import { isSoundKey, soundByKey } from "./sounds";
 import { drawRing } from "./thumbs";
@@ -12,13 +13,14 @@ import { audioSession, initMediaSession, setNowPlaying, setPlaybackState, setPos
 import { $, closeSheet, openSheet, pauseForSheet, type SheetRow, toast } from "./ui";
 import { ensureEnv, feed, field, RATES, shown } from "./state";
 import { showView, updateBadge, view, type View } from "./nav";
-import { openMakeSound, react, renderReactionCounts } from "./fan";
+import { openMakeSound, react } from "./fan";
+import { hallOn, hallTick, renderPads, setHall } from "./pads";
 
-// =================== эфир: очередь, каналы, сторис ===================
+// =================== эфир: очередь, диапазоны, шкала ===================
 
 type Item = { post: Post; parent: Post | null };
-// радио — бесконечный поток канала; сторис и списки — временная очередь с возвратом
-type Mode = { kind: "radio" } | { kind: "story"; index: number } | { kind: "list"; back: View };
+// радио — бесконечный поток диапазона; списки (ветка, «Моё») — временная очередь с возвратом
+type Mode = { kind: "radio" } | { kind: "list"; back: View };
 
 export const player = new Player();
 export const visual = new Visual($<HTMLCanvasElement>("cv"));
@@ -26,9 +28,8 @@ visual.setSource(player.level);
 // решётка динамика под экраном вспыхивает от того же звука
 new Grille($<HTMLCanvasElement>("grille"), () => visual.level);
 
-let channels: Stream[] = [];
-let channelId = "foryou";
-const radioPos = new Map<string, number>(); // где остановились в каждом канале
+export let band: Band = "city";
+const radioPos = new Map<Band, number>(); // где остановились в каждом диапазоне
 export let mode: Mode = { kind: "radio" };
 export let items: Item[] = [];
 let qi = 0;
@@ -37,90 +38,62 @@ export let rate = 1.25;
 export function cycleRate() {
   rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
   player.el.playbackRate = rate;
-  showRate();
 }
 let keyPlaying: boolean | null = null;
 const mmss = (s: number) => {
   const v = Math.max(0, Math.floor(s));
   return `${String(Math.floor(v / 60)).padStart(2, "0")}:${String(v % 60).padStart(2, "0")}`;
 };
-
-// плашка под экраном: скорость, по нажатию — следующая
-function showRate() {
-  $("rateText").textContent = `×${rate.toLocaleString(lang)}`;
-}
-showRate();
-$("rateBtn").onclick = () => cycleRate();
 export let started = false; // браузер не даст играть звук до первого касания
-let stories: Post[] = [];
-const seen = new Set<string>();
 
 const parentOf = (p: Post) => feed.find((f) => f.replies.includes(p)) ?? null;
 export const rootOf = (it: Item) => it.parent ?? it.post;
-export const cur = () => items[qi];
+export const cur = (): Item | undefined => items[qi];
 
-export function renderChannels() {
-  channels = streams(shown(feed));
-  $("chanName").textContent = channels.find((c) => c.id === channelId)?.title ?? t("air");
-}
-
-$("chanBtn").onclick = () =>
-  openSheet(
-    t("listenWhat"),
-    "",
-    channels.map((c) => ({
-      icon: c.id === channelId ? "check" : "headphones",
-      label: c.title,
-      on: c.id === channelId && mode.kind === "radio",
-      onClick: () => {
-        closeSheet(false);
-        tuneRadio(c.id, true);
-      },
-    })),
-  );
-
-export function renderStories() {
-  stories = mostDiscussed(shown(feed));
-  const st = $("stories");
-  st.innerHTML = "";
-  stories.forEach((p, i) => {
-    const b = document.createElement("button");
-    b.className = "story" + (seen.has(p.id) ? " seen" : "");
-    b.setAttribute("aria-label", `${p.author}, ${tn("replies", p.replies.length)}`);
-    b.innerHTML = `<canvas></canvas>`;
-    b.style.setProperty("--ring", auraGradient(aura(p.author)));
-    b.onclick = () => openStory(i);
-    st.append(b);
-    const cv = b.querySelector("canvas")!;
-    const draw = () => drawRing(cv, p.env, seen.has(p.id) ? null : aura(p.author));
-    draw();
-    void ensureEnv(p).then(draw);
+// переключатель диапазонов: в очереди ни один не выбран
+function paintBands() {
+  document.querySelectorAll<HTMLElement>("[data-band]").forEach((b) => {
+    const on = mode.kind === "radio" && b.dataset.band === band;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
   });
+  $("playSub").textContent = mode.kind === "radio" ? `${t(`band.${band}`)} · ${items.length}` : "";
 }
+document.querySelectorAll<HTMLElement>("[data-band]").forEach((b) => {
+  b.onclick = () => {
+    click(0.1);
+    tuneRadio(b.dataset.band as Band, true);
+  };
+});
 
-export function tuneRadio(id: string, play: boolean) {
-  if (mode.kind === "radio") radioPos.set(channelId, qi);
-  channelId = id;
+// at — с какого голоса начать; без него — где остановились в этом диапазоне
+export function tuneRadio(id: Band, play: boolean, at?: number) {
+  if (mode.kind === "radio") radioPos.set(band, qi);
+  band = id;
   mode = { kind: "radio" };
-  const ch = channels.find((c) => c.id === id) ?? channels[0];
-  items = ch.posts.map((p) => ({ post: p, parent: parentOf(p) })).filter((it) => visible(it.post));
-  renderChannels();
-  setQueue(radioPos.get(ch.id) ?? 0, play);
+  items = bandPosts(shown(feed), id, savedAuthors())
+    .map((p) => ({ post: p, parent: parentOf(p) }))
+    .filter((it) => !it.parent || visible(it.parent));
+  setQueue(at ?? radioPos.get(id) ?? 0, play);
 }
 
-function openStory(index: number) {
-  if (mode.kind === "radio") radioPos.set(channelId, qi);
-  const p = stories[index];
-  seen.add(p.id);
-  mode = { kind: "story", index };
-  items = [{ post: p, parent: null }, ...shown(p.replies).map((r) => ({ post: r, parent: p }))];
-  renderStories();
-  setQueue(0, true);
+// лента изменилась под нами (эфир подключился позже): очередь пересобираем,
+// только пока ничего не играет, — звучащий голос не обрываем
+export function refreshAir() {
+  if (!started && mode.kind === "radio") tuneRadio(band, false);
+}
+
+// клавиша памяти: диапазон «свои», стрелка — на свежей записи этого голоса
+export function tuneToAuthor(name: string) {
+  const at = bandPosts(shown(feed), "own", savedAuthors()).findIndex((p) => p.author === name);
+  if (at < 0) return false;
+  tuneRadio("own", true, at);
+  return true;
 }
 
 export function openQueue(list: Item[], start = 0, back: View = view) {
   if (!list.length) return;
-  if (mode.kind === "radio") radioPos.set(channelId, qi);
+  if (mode.kind === "radio") radioPos.set(band, qi);
   mode = { kind: "list", back };
   items = list;
   if (view !== "home") showView("home");
@@ -132,38 +105,61 @@ export function openThreadAt(root: Post, from: Post, back: View = view) {
   openQueue(list, Math.max(0, list.findIndex((it) => it.post === from)), back);
 }
 
-// выйти из сторис/ветки обратно: в радио или в «Моё»
+// выйти из ветки обратно: в радио или в «Моё»
 function leaveQueue() {
   const back = mode.kind === "list" ? mode.back : "home";
   if (back === "mine") {
     player.el.pause();
-    mode = { kind: "radio" };
-    tuneRadio(channelId, false);
+    tuneRadio(band, false);
     showView("mine");
-  } else tuneRadio(channelId, started);
+  } else tuneRadio(band, started);
 }
 $("back").onclick = leaveQueue;
 
 function setQueue(start: number, play: boolean) {
   const inQueue = mode.kind !== "radio";
   $("context").hidden = !inQueue;
-  $("stories").hidden = inQueue;
+  $("bands").hidden = inQueue;
   $("back").setAttribute("aria-label", t(mode.kind === "list" && mode.back === "mine" ? "backMine" : "backHome"));
-  if (play && started) void playAt(start);
+  qi = Math.max(0, Math.min(start, items.length - 1));
+  paintBands();
+  setStations(items.map((it) => ({ name: it.post.author, src: it.post.src, reply: !!it.parent })), qi);
+  visual.setSearching(false);
+  if (play && started && items.length) void playAt(qi);
   else {
-    qi = Math.max(0, Math.min(start, items.length - 1));
     player.el.pause();
     player.el.removeAttribute("src");
     show();
   }
 }
 
+// шкала: пока ведут — основной звук молчит, экран показывает голос под стрелкой
+initDial({
+  out: () => player.fx(400),
+  onSearch: () => {
+    player.el.pause();
+    visual.setSearching(true);
+  },
+  onNear: (i) => {
+    qi = i;
+    show();
+  },
+  onTune: (i) => {
+    visual.setSearching(false);
+    void playAt(i);
+  },
+  onStep: (d) => void (d > 0 ? next() : prev()),
+});
+
 async function playAt(i: number) {
+  if (!items.length) return; // диапазон пуст или лента ещё грузится
   qi = (i + items.length) % items.length;
-  markHeard(cur().post.id);
+  setIndex(qi);
+  visual.setSearching(false);
+  const p = items[qi].post;
+  markHeard(p.id);
   updateBadge();
   show();
-  const p = cur().post;
   // следующие голоса разбираем заранее: громкость готова до того, как они зазвучат
   for (let k = 1; k <= 2; k++) if (items.length > k) void ensureEnv(items[(qi + k) % items.length].post);
   void ensureEnv(p).then(() => cur()?.post === p && p.loud && player.setLoudness(p.loud));
@@ -175,16 +171,21 @@ async function playAt(i: number) {
   }
 }
 
-// направление смены записи: 1 — следующий голос снизу, -1 — предыдущий сверху
+// направление смены записи: 1 — следующий голос, -1 — предыдущий
 let swapDir = 0;
+// докуда был слышен голос, когда его показали: вырос после моей реакции — сообщаем
+let shownSignal: { post: Post; radius: number } | null = null;
 
 export function show() {
-  const { post: p, parent } = cur();
-  // аура говорящего: цвет за диском, дорожка времени; переход между аурами плавный (CSS @property)
-  const a = aura(p.author);
-  paintAura($("home"), a); // аура на весь экран: её видят и свечение, и волосок под диском
-  visual.setAura(a);
-  field.setAura(a);
+  renderPads();
+  const it = cur();
+  if (!it) return showEmpty();
+  const { post: p, parent } = it;
+  // личный знак говорящего: цвет лампочки у имени и место крестика в сетке плюсов
+  const hue = voiceColor(p.author);
+  $("stage").style.setProperty("--hue", hue);
+  visual.setSign(voiceCross(p.author), hue);
+  field.setAura(aura(p.author));
   if (swapDir) {
     const st = $("stage");
     st.classList.remove("swap-next", "swap-prev");
@@ -194,46 +195,97 @@ export function show() {
   }
   visual.setEnv(p.env);
   void ensureEnv(p).then(() => cur()?.post === p && visual.setEnv(p.env));
+  $("who").textContent = parent ? `↳ ${p.author}` : p.author;
   $("hook").textContent = p.hook;
   $("hook").classList.remove("open");
   $("transcript").textContent = p.text ?? t("transcriptPending");
   $("transcript").hidden = true;
   $("live").textContent = `${p.author}: ${p.hook}`;
   setNowPlaying(p.hook, p.author, artFor(p.author));
-  const n = shown(rootOf(cur()).replies).length;
+  const n = shown(rootOf(it).replies).length;
   $("threadCount").textContent = n ? String(n) : "";
-  $("laterBtn").classList.toggle("on", isLater(p.id));
-  $("heartBtn").classList.remove("liked");
-  $("heartBtn").querySelector(".ico")!.outerHTML = icon("heart");
-  renderReactionCounts();
+  shownSignal = null;
+  paintSignal();
   visual.setMarks(marksFor(p, !parent));
-  // «гусеница»: пройденные шарики переливаются, текущий светится
+  // ряд светодиодов очереди: пройденные, текущий, впереди
   $("segments").innerHTML =
     mode.kind === "radio" ? "" : items.map((_, i) => `<span class="seg${i < qi ? " done" : i === qi ? " now" : ""}"><i></i></span>`).join("");
   $("fan").hidden = true;
 }
 
+// диапазон пуст: экран говорит, как его наполнить
+function showEmpty() {
+  $("stage").style.removeProperty("--hue");
+  visual.setSign(-1, "");
+  visual.setEnv(null);
+  visual.setMarks([]);
+  visual.setProgress(0);
+  $("who").textContent = t("dialEmptyCaps");
+  $("hook").textContent = t(`empty.${band}`);
+  $("transcript").hidden = true;
+  $("live").textContent = t(`empty.${band}`);
+  $("threadCount").textContent = "";
+  $("radius").textContent = $("rumorTag").textContent = $("sigExtra").textContent = $("time").textContent = $("voiceNo").textContent = "";
+  $("bars").querySelectorAll("i").forEach((b) => b.classList.remove("on"));
+  $("hairFill").style.width = "0%";
+  $("segments").innerHTML = "";
+  $("fan").hidden = true;
+}
+
+// сигнал записи: деления, докуда слышно, ответы и реакции; у слуха — срок жизни и счёт «верю / не верю»
+export function paintSignal() {
+  const it = cur();
+  if (!it) return;
+  const root = rootOf(it);
+  const s = signalOf(root);
+  const bars = $("bars");
+  bars.querySelectorAll("i").forEach((b, i) => b.classList.toggle("on", i < s.bars));
+  // у слуха вместо «докуда слышно» — срок жизни: строка не резиновая
+  $("radius").textContent = isRumor(root) ? "" : t(`radius.${s.radius}`);
+  if (isRumor(root)) {
+    const v = rumorVotes(root);
+    $("rumorTag").textContent = t("rumorLeftCaps", { n: rumorHoursLeft(root) });
+    $("sigExtra").textContent = `${RUMOR_YES}${v.yes} ${RUMOR_NO}${v.no}`;
+  } else {
+    $("rumorTag").textContent = "";
+    $("sigExtra").textContent = `↳ ${shown(root.replies).length} · ♥ ${reactionCount(root)}`;
+  }
+  if (shownSignal?.post === root && s.radius > shownSignal.radius) {
+    bars.classList.remove("up");
+    void bars.offsetWidth;
+    bars.classList.add("up");
+    toast(t("signalUp", { where: t(`radius.${s.radius}`) }));
+  }
+  shownSignal = { post: root, radius: s.radius };
+}
+
+// доехать до голоса по шкале и сыграть; в фоне и до первого касания — без поездки
+function go(i: number) {
+  if (!started || document.hidden) return void playAt(i);
+  travel(i);
+}
+
 function next() {
+  if (!items.length) return;
   swapDir = 1;
-  if (mode.kind === "radio") return playAt(qi + 1); // радио не кончается: по кругу
-  if (qi < items.length - 1) return playAt(qi + 1);
-  if (mode.kind === "story" && mode.index < stories.length - 1) return openStory(mode.index + 1);
+  if (mode.kind === "radio" || qi < items.length - 1) return go(qi + 1); // радио не кончается: по кругу
   leaveQueue();
 }
 
 function prev() {
+  if (!items.length) return;
   swapDir = -1;
   if (player.el.currentTime > 2) {
     swapDir = 0;
     player.el.currentTime = 0;
     return;
   }
-  if (qi > 0 || mode.kind === "radio") return playAt(qi - 1);
-  if (mode.kind === "story" && mode.index > 0) return openStory(mode.index - 1);
+  if (qi > 0 || mode.kind === "radio") return go(qi - 1);
   player.el.currentTime = 0;
 }
 
 function toggle() {
+  if (!cur()) return;
   if (player.el.paused) {
     if (player.el.getAttribute("src")) void player.el.play().then(() => (started = true)).catch(() => playAt(qi));
     else void playAt(qi);
@@ -242,13 +294,14 @@ function toggle() {
 
 function playThread() {
   const it = cur();
+  if (!it) return;
   const root = rootOf(it);
   const replies = shown(root.replies);
   if (!replies.length) return toast(t("noReplies"));
   openThreadAt(root, it.parent ? it.post : replies[0], view);
 }
 
-player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && next(), 400));
+player.el.addEventListener("ended", () => setTimeout(() => !$("home").hidden && !searching() && next(), 200));
 
 // =================== экран блокировки и гарнитура ===================
 
@@ -289,17 +342,17 @@ audioSession("playback");
   visual.setProgress(el.ended ? 0 : prog);
   glow($("stage"), visual);
 
-  // диск чистый: имя и волосок прогресса — под ним
-  const { post: p, parent } = cur();
-  $("who").textContent = parent ? `↳ ${p.author}` : p.author;
   $("hairFill").style.width = `${(el.ended ? 0 : prog) * 100}%`;
   $("hair").setAttribute("aria-valuenow", String(Math.round(prog * 100)));
   $("startBtn").hidden = started;
-  // экран прибора: большое время, длительность, номер голоса в очереди
-  $("timeNow").textContent = mmss(el.ended ? 0 : el.currentTime);
-  $("timeDur").textContent = d ? `/ ${mmss(d)}` : "";
+  // строка состояния: поиск по шкале или эфир, зал, номер голоса; время — мелко, у сигнала
+  $("airState").textContent = t(searching() ? "searchCaps" : "onAirCaps");
+  $("hallTag").textContent = hallOn() ? t("hallOnCaps") : "";
+  $("time").textContent = searching() || !d ? "" : `${mmss(el.ended ? 0 : el.currentTime)} / ${mmss(d)}`;
   $("voiceNo").textContent = `${qi + 1} / ${items.length}`;
   const playing = !el.paused && !el.ended;
+  // зал: чужие реакции тихо звучат там, где их поставили
+  if (playing) hallTick(cur()!.post, prog);
   if (playing !== keyPlaying) {
     keyPlaying = playing;
     $("playWord").textContent = t(playing ? "pauseCaps" : "playCaps");
@@ -422,18 +475,12 @@ $("stage").addEventListener("pointerup", (e) => {
 
 $("thread").onclick = playThread;
 $("playKey").onclick = () => (started ? toggle() : void playAt(qi));
-$("nextKey").onclick = () => void next();
 $("startBtn").onclick = (e) => {
   e.stopPropagation();
   void playAt(qi);
 };
 $("startBtn").addEventListener("pointerdown", (e) => e.stopPropagation());
 $("startBtn").addEventListener("pointerup", (e) => e.stopPropagation());
-$("laterBtn").onclick = () => {
-  const on = toggleLater(cur().post.id);
-  $("laterBtn").classList.toggle("on", on);
-  toast(t(on ? "savedLater" : "removedLater"));
-};
 $("hook").onclick = () => {
   $("hook").classList.toggle("open");
   $("transcript").hidden = !$("transcript").hidden;
@@ -463,19 +510,13 @@ function dropHidden() {
   const ok = (it: Item) => visible(it.post) && (!it.parent || visible(it.parent));
   const nextIndex = items.slice(0, qi).filter(ok).length;
   items = items.filter(ok);
-  renderChannels();
-  renderStories();
   updateBadge();
   if (!items.length) {
-    if (mode.kind === "radio") tuneRadio(channelId, started);
+    if (mode.kind === "radio") tuneRadio(band, started);
     else leaveQueue();
     return;
   }
-  if (started) void playAt(nextIndex % items.length);
-  else {
-    qi = nextIndex % items.length;
-    show();
-  }
+  setQueue(nextIndex % items.length, true);
 }
 
 const REASONS: ReportReason[] = ["abuse", "danger", "sexual", "personal", "spam", "crisis", "other"];
@@ -547,7 +588,6 @@ export function openLanguages() {
 }
 
 $("moreBtn").onclick = () => {
-  const { post: p } = cur();
   pauseForSheet(player.el);
   const speedRow: SheetRow = {
     icon: "speed",
@@ -558,15 +598,51 @@ $("moreBtn").onclick = () => {
       toast(t("speed", { x: rate.toLocaleString(lang) }));
     },
   };
-  const soundRow: SheetRow = { icon: "scissors", label: t("makeSound"), onClick: () => void openMakeSound(p) };
+  // зал: слышать ли, как реагируют другие
+  const hallRow: SheetRow = {
+    icon: "wave",
+    label: t(hallOn() ? "hallRowOn" : "hallRowOff"),
+    on: hallOn(),
+    onClick: () => {
+      setHall(!hallOn());
+      closeSheet();
+      toast(t(hallOn() ? "hallRowOn" : "hallRowOff"));
+    },
+  };
   const langRow: SheetRow = { icon: "globe", label: `${t("language")} · ${LANGS.find((l) => l.id === lang)!.name}`, onClick: openLanguages };
+  const it = cur();
+  if (!it) return openSheet(t("air"), "", [speedRow, hallRow, langRow]);
+  const p = it.post;
+  const laterRow: SheetRow = {
+    icon: "clock",
+    label: t(isLater(p.id) ? "laterRowOff" : "laterAria"),
+    on: isLater(p.id),
+    onClick: () => {
+      const on = toggleLater(p.id);
+      closeSheet();
+      toast(t(on ? "savedLater" : "removedLater"));
+    },
+  };
+  // мемы и звуки сообщества — веер над клавишами
+  const fanRow: SheetRow = {
+    icon: "smile",
+    label: t("moreSounds"),
+    onClick: () => {
+      closeSheet();
+      $("fan").hidden = false;
+    },
+  };
+  const soundRow: SheetRow = { icon: "scissors", label: t("makeSound"), onClick: () => void openMakeSound(p) };
   if (p.mine) {
-    openSheet(p.author, "", [speedRow, soundRow, langRow, { icon: "trash", label: t("deletePost"), danger: true, onClick: () => confirmDelete(p) }]);
+    openSheet(p.author, "", [laterRow, fanRow, soundRow, speedRow, hallRow, langRow, { icon: "trash", label: t("deletePost"), danger: true, onClick: () => confirmDelete(p) }]);
     return;
   }
   openSheet(p.author, "", [
-    speedRow,
+    laterRow,
+    fanRow,
     soundRow,
+    speedRow,
+    hallRow,
     langRow,
     { icon: "flag", label: t("report"), onClick: () => openReport(p) },
     {

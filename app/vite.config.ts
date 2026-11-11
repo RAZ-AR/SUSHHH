@@ -48,9 +48,10 @@ const pwa = VitePWA({
         urlPattern: ({ url, request }) => request.destination === "audio" || /\.(m4a|mp3|ogg|opus|webm|aac)$/.test(url.pathname),
         handler: "CacheFirst",
         options: {
-          cacheName: "voices",
+          cacheName: "voices-v2",
           rangeRequests: true, // <audio> просит куски файла — отдаём их из кэша
-          cacheableResponse: { statuses: [0, 200] },
+          // только полные CORS-ответы: «непрозрачный» ответ из кэша плеер в CORS-режиме не примет
+          cacheableResponse: { statuses: [200] },
           expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
         },
       },

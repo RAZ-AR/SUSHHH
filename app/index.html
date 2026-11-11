@@ -19,30 +19,39 @@
   <body>
     <!-- эфир: прибор. Сверху круглые экраны-сторис, в центре экран с волной, под ним решётка и клавиши -->
     <section class="app view" id="home">
+      <!-- диапазоны приёмника; в очереди (ветка, «Моё») на их месте — «назад» и ряд светодиодов -->
       <header class="top">
-        <button class="key chan" id="chanBtn" aria-haspopup="dialog"><span id="chanName"></span><i data-i="down"></i></button>
+        <nav class="switch3 bands" id="bands" data-i18n-aria="bandsAria">
+          <button class="pos" data-band="city"><i class="led"></i><span data-i18n="bandCityCaps"></span></button>
+          <button class="pos" data-band="own"><i class="led"></i><span data-i18n="bandOwnCaps"></span></button>
+          <button class="pos" data-band="rumor"><i class="led"></i><span data-i18n="bandRumorCaps"></span></button>
+        </nav>
+        <div class="context" id="context" hidden>
+          <button class="key sq" id="back" data-i18n-aria="backHome"><i data-i="left"></i></button>
+          <div class="segments" id="segments"></div>
+        </div>
         <button class="key sq" id="moreBtn" data-i18n-aria="more" aria-haspopup="dialog"><i data-i="dots"></i></button>
       </header>
 
-      <div class="stories" id="stories" data-i18n-aria="storiesAria"></div>
-
-      <div class="context" id="context" hidden>
-        <button class="key sq" id="back" data-i18n-aria="backHome"><i data-i="left"></i></button>
-        <div class="segments" id="segments"></div>
+      <!-- шкала настройки: лента с голосами под неподвижной стрелкой -->
+      <div class="dial" id="dial" role="slider" tabindex="0" data-i18n-aria="dialAria" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1">
+        <div class="dial-scale" id="scale"><div class="dial-ticks"></div></div>
+        <div class="needle"></div>
+        <p class="dial-empty" id="dialEmpty" data-i18n="dialEmptyCaps" hidden></p>
       </div>
 
       <div class="device">
         <div class="bezel">
           <div class="screen stage" id="stage" data-i18n-aria="stageAria">
             <canvas id="cv"></canvas>
-            <div class="scr-status" aria-hidden="true"><span class="clock-now"></span><span class="rec-dot"></span><span data-i18n="onAirCaps"></span><span class="grow"></span><span id="voiceNo"></span></div>
+            <div class="scr-status" aria-hidden="true"><span class="clock-now"></span><span class="rec-dot"></span><span id="airState"></span><span class="grow"></span><span id="hallTag"></span><span id="voiceNo"></span></div>
             <button class="start" id="startBtn" data-i18n-aria="startAria"><i data-i="play"></i><span data-i18n="startCaps"></span></button>
             <div class="floaters" id="floaters"></div>
             <p class="transcript" id="transcript" hidden></p>
             <div class="scr-foot">
-              <p class="who" id="who"></p>
+              <p class="who call" id="who"></p>
               <p class="hook" id="hook" role="button" tabindex="0" data-i18n-aria="hookAria"></p>
-              <p class="scr-time"><b id="timeNow">00:00</b><span id="timeDur"></span></p>
+              <p class="sig"><span class="bars" id="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="radius" id="radius"></span><span class="rumor" id="rumorTag"></span><span id="sigExtra"></span><span class="grow"></span><span id="time"></span></p>
               <div class="hair" id="hair" role="slider" tabindex="0" data-i18n-aria="hairAria" aria-valuemin="0" aria-valuemax="100"><i id="hairFill"></i></div>
             </div>
             <p class="sr-only" aria-live="polite" id="live"></p>
@@ -51,18 +60,23 @@
         <button class="knob" data-flip data-i18n-aria="flipAria"></button>
       </div>
 
+      <!-- под экраном: клавиши памяти, решётка динамика, ветка -->
       <div class="strip">
-        <button class="label-pill" id="rateBtn" data-i18n-aria="rateAria"><i class="dot"></i><span id="rateText"></span></button>
+        <button class="mem" data-m="0"><i></i>M1</button>
+        <button class="mem" data-m="1"><i></i>M2</button>
+        <button class="mem" data-m="2"><i></i>M3</button>
+        <button class="mem" data-m="3"><i></i>M4</button>
         <canvas class="grille" id="grille" aria-hidden="true"></canvas>
+        <button class="label-pill" id="thread" data-i18n-aria="threadAria"><i data-i="message"></i><span id="threadCount"></span></button>
       </div>
 
       <div class="keys home-keys">
-        <button class="keycap big" id="playKey" data-i18n-aria="startAria"><span class="cap-btn"><i data-i="play"></i></span><span class="cap-label"><b id="playWord"></b><small>1 · 2U</small></span></button>
+        <button class="keycap big" id="playKey" data-i18n-aria="startAria"><span class="cap-btn"><i data-i="play"></i></span><span class="cap-label"><b id="playWord"></b><small id="playSub"></small></span></button>
         <button class="keycap big orange" id="reply" data-i18n-aria="replyAria"><span class="cap-btn"><i data-i="mic"></i></span><span class="cap-label"><b data-i18n="replyCaps"></b><small data-i18n="replySub"></small></span></button>
-        <button class="keycap" id="heartBtn" data-i18n-aria="heartAria"><span class="cap-btn sm"><i data-i="heart"></i></span><span class="cap-label"><b id="heartCount"></b><small data-i18n="reactCaps"></small></span></button>
-        <button class="keycap" id="nextKey" data-i18n-aria="nextAria"><span class="cap-btn sm"><i data-i="next"></i></span><span class="cap-label"><small data-i18n="nextCaps"></small></span></button>
-        <button class="keycap" id="thread" data-i18n-aria="threadAria"><span class="cap-btn sm"><i data-i="message"></i></span><span class="cap-label"><b id="threadCount"></b><small data-i18n="threadCaps"></small></span></button>
-        <button class="keycap" id="laterBtn" data-i18n-aria="laterAria"><span class="cap-btn sm"><i data-i="clock"></i></span><span class="cap-label"><small data-i18n="laterCaps"></small></span></button>
+        <button class="keycap pad" data-pad="0"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
+        <button class="keycap pad" data-pad="1"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
+        <button class="keycap pad" data-pad="2"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
+        <button class="keycap pad" data-pad="3"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
         <div class="fan" id="fan" hidden></div>
       </div>
 
@@ -146,6 +160,7 @@
         <button class="knob" data-flip data-i18n-aria="flipAria"></button>
       </div>
       <p class="rec-note" id="recNote"></p>
+      <button class="label-pill rumor-toggle" id="rumorBtn" data-i18n-aria="rumorAria" aria-pressed="false"><i class="dot"></i><span data-i18n="rumorToggleCaps"></span></button>
       <div class="keys rec-keys" id="recIdle">
         <button class="keycap big rec-btn" id="recBtn" data-i18n-aria="startRec"><span class="cap-btn"><i data-i="mic"></i></span><span class="cap-label"><b data-i18n="recKey"></b><small data-i18n="recKeySub"></small></span></button>
       </div>

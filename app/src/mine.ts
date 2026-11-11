@@ -29,8 +29,8 @@ document.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => {
 
 function tile(p: Post, name: string, isNew: boolean, onOpen: () => void) {
   const el = document.createElement("button");
-  el.className = "tile" + (isNew ? " new" : "");
-  el.setAttribute("aria-label", `${name}: ${p.hook}${isNew ? t("newAria") : ""}`);
+  el.className = "tile" + (isNew ? " new" : "") + (p.unsent ? " unsent" : "");
+  el.setAttribute("aria-label", `${name}: ${p.hook}${isNew ? t("newAria") : ""}${p.unsent ? t("unsentAria") : ""}`);
   el.innerHTML = `<canvas></canvas><span>${escapeHtml(name)}</span>`;
   el.onclick = onOpen;
   const cv = el.querySelector("canvas")!;

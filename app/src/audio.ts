@@ -92,6 +92,8 @@ export class Player {
 
   constructor() {
     this.el.preload = "auto";
+    // голоса лежат на другом домене: без CORS-режима Web Audio отдаёт вместо них тишину
+    this.el.crossOrigin = "anonymous";
     this.el.preservesPitch = true;
     // тишина в конце записи не играет: следующий голос начинается сразу
     this.el.addEventListener("timeupdate", () => {
@@ -149,6 +151,11 @@ export class Player {
     }
     if (fresh && l.start && this.el.currentTime < l.start) this.el.currentTime = l.start; // тишину в начале пропускаем
     this.ramp(this.target, fresh ? 0.15 : 0.05);
+  }
+
+  // приглушить голос, пока поверх записывают или играют что-то короткое
+  duck(on: boolean) {
+    if (!this.el.paused) this.ramp(on ? this.target * 0.15 : this.target, 0.12);
   }
 
   // анализ записи закончился уже во время игры — подстраиваемся мягко

@@ -27,6 +27,8 @@ export function initServiceWorker(onNeedRefresh: (apply: () => void) => void, on
       if (reg) setInterval(() => void reg.update(), 60 * 60 * 1000);
     },
   });
+  // старый кэш голосов хранил ответы без CORS — плеер в CORS-режиме их не сыграет
+  void globalThis.caches?.delete("voices").catch(() => {});
   // установленному приложению браузер не стирает черновики и кэш голосов
   if (isStandalone()) void navigator.storage?.persist?.();
 }

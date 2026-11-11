@@ -1,8 +1,8 @@
 // Экран записи: микрофон, шумодав, автостоп, прослушать, отправить; обновление приложения ждёт конца записи.
 
 import { envelope, Player, Recorder, warmDenoiser } from "./audio";
-import { findPost, laterIds, me, type Post, removeLater, publishRecording, saveRecording, type Stored, storedToPost } from "./feed";
-import { aura, paintAura } from "./aura";
+import { canSend, findPost, flushQueue, laterIds, me, type Post, removeLater, RUMOR_TAG, saveRecording, type Stored, storedToPost } from "./feed";
+import { aura, paintAura, voiceColor, voiceCross } from "./aura";
 import { t } from "./i18n";
 import { icon } from "./icons";
 import { LiveTranscript } from "./speech";
@@ -11,7 +11,7 @@ import { audioSession, initServiceWorker, keepAwake } from "./pwa";
 import { $, clock, escapeHtml, openSheet, toast } from "./ui";
 import { feed, field, POST_MS, REPLY_MS } from "./state";
 import { view } from "./nav";
-import { cur, glow, items, mode, player, progressNow, renderChannels, renderStories, rootOf, show } from "./air";
+import { cur, glow, items, mode, player, progressNow, rootOf, show } from "./air";
 import { renderMine } from "./mine";
 
 // =================== запись ===================
@@ -32,6 +32,14 @@ let take: { blob: Blob; text: string; env: number[] } | null = null;
 let previewUrl = "";
 let pressedAt = 0;
 let resumeAfter = false;
+let rumor = false; // запись уйдёт в диапазон «слухи» и проживёт сутки
+
+function setRumor(on: boolean) {
+  rumor = on;
+  $("rumorBtn").setAttribute("aria-pressed", String(on));
+  if (recState !== "live") setRecState(recState);
+}
+$("rumorBtn").onclick = () => setRumor(!rumor);
 
 recVisual.setSource(() => recorder.level() ?? preview.level());
 
@@ -49,8 +57,12 @@ export function openRecorder(to: Post | null, at?: number) {
   const mine = aura(me());
   paintAura($("recStage"), mine);
   recVisual.setAura(mine);
+  recVisual.setSign(voiceCross(me()), voiceColor(me())); // мой личный знак — на экране записи
   field.setAura(mine);
   $("recWhat").innerHTML = to ? `${icon("reply")}${escapeHtml(to.author)}` : `${icon("mic")}${t("upTo", { n: POST_MS / 1000 })}`;
+  $("rumorBtn").hidden = !!to; // слух — только новая запись, не ответ
+  rumor = false;
+  $("rumorBtn").setAttribute("aria-pressed", "false");
   reset();
   $("recorder").hidden = false;
   void warmDenoiser()?.catch(() => {}); // шумодав грузится, пока человек собирается с мыслями
@@ -99,7 +111,7 @@ function setRecState(s: "idle" | "live" | "done", note?: string) {
   $("recIdle").hidden = s === "done";
   $("recDone").hidden = s !== "done";
   $("recNote").textContent =
-    note ?? (s === "idle" ? t("recHint") : s === "done" ? t(replyTo ? "recReplyHeard" : "recOnAir") : "");
+    note ?? (rumor && s !== "live" ? t("rumorRule") : s === "idle" ? t("recHint") : s === "done" ? t(replyTo ? "recReplyHeard" : "recOnAir") : "");
   if (s === "idle") {
     setTimer(0);
     $("recText").textContent = "";
@@ -213,9 +225,12 @@ $("publish").onclick = async () => {
     at: replyAt,
     text: take.text || undefined,
     env: take.env.length ? take.env : undefined,
+    tags: rumor && !replyTo ? [RUMOR_TAG] : undefined,
   };
   await saveRecording(stored);
-  void publishRecording(stored); // в общий эфир; без сети уйдёт при следующем запуске
+  // в общий эфир; без сети запись ждёт в очереди и уйдёт сама, когда связь вернётся
+  const live = canSend();
+  void flushQueue().then((ok) => !ok && live && toast(t("savedOffline")));
   const post = storedToPost(stored);
   const wasReply = !!replyTo;
   resumeAfter = false;
@@ -232,17 +247,16 @@ $("publish").onclick = async () => {
     else renderMine();
   } else {
     feed.unshift(post);
-    renderChannels();
     if (view === "mine") renderMine();
   }
-  renderStories();
-  toast(t(wasReply ? "replySent" : "onAirNow"));
+  toast(t(!live ? "savedOffline" : wasReply ? "replySent" : stored.tags ? "rumorSent" : "onAirNow"));
 };
 
 // ответ привязывается к моменту: где сейчас пауза в исходной записи,
 // а если слушаем чужой ответ — к тому же моменту, что и он
 $("reply").onclick = () => {
   const it = cur();
+  if (!it) return openRecorder(null); // диапазон пуст — отвечать некому, записываем своё
   if (it.parent) return openRecorder(it.parent, it.post.at);
   if (!player.el.currentTime) return openRecorder(it.post);
   openRecorder(it.post, progressNow());

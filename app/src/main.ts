@@ -7,12 +7,12 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/600.css";
 import "@fontsource/jetbrains-mono/800.css";
 import { $, toast } from "./ui";
-import { addRemotePost, loadFeed } from "./feed";
+import { addRemotePost, flushQueue, loadFeed, onSent, syncRemote } from "./feed";
 import { onNewPost } from "./backend";
 import { t } from "./i18n";
 import { feed, field, setFeed } from "./state";
 import { showView, updateBadge, view } from "./nav";
-import { player, renderChannels, renderStories, started, tuneRadio, visual } from "./air";
+import { player, refreshAir, show, started, tuneRadio, visual } from "./air";
 import { renderMine, setMineTab } from "./mine";
 import { paintMe } from "./profile";
 import { openRecorder, preview, recorder, recVisual } from "./recorder-ui";
@@ -30,7 +30,7 @@ document.querySelectorAll<HTMLElement>("[data-flip]").forEach((b) => {
 });
 onLook(() => {
   document.querySelectorAll<HTMLElement>("[data-flip]").forEach((b) => b.setAttribute("aria-pressed", String(look === "light")));
-  renderStories();
+  show();
   if (view === "mine") renderMine();
   if (view === "me") renderProfile();
   paintMe();
@@ -85,20 +85,63 @@ function openShortcut() {
   }
 }
 
-loadFeed().then((f) => {
-  setFeed(f);
-  renderChannels();
-  renderStories();
-  tuneRadio("foryou", false);
-  showView("home");
-  openShortcut();
+// общий эфир подключается отдельно от первого экрана: не вышло — пробуем снова,
+// пока не получится (5 с, 10 с … не реже раза в минуту), и сразу, как только вернулась сеть
+let live = false;
+let syncing = false;
+let rendered = false;
+let retryMs = 5000;
+let retryTimer = 0;
+
+async function sync() {
+  if (live || syncing) return;
+  syncing = true;
+  clearTimeout(retryTimer);
+  const ok = await syncRemote(feed).catch(() => false);
+  syncing = false;
+  if (!ok) {
+    retryTimer = window.setTimeout(() => void sync(), retryMs);
+    retryMs = Math.min(retryMs * 2, 60_000);
+    return;
+  }
+  live = true;
+  if (rendered) refresh();
   // живой эфир: чужие голоса появляются сразу; ответ на мою запись — всплывашка и бейдж
   onNewPost((r) => {
     const added = addRemotePost(feed, r);
     if (!added) return;
     if (added.root.mine && added.post !== added.root) toast(t("repliedToYou"));
     updateBadge();
-    renderStories();
+    if (added.post === added.root) refreshAir(); // новый голос встаёт на шкалу, если она не занята
+    else show(); // ответ: счётчик ветки и метка на волне
     if (view === "mine") renderMine();
   });
+}
+
+function refresh() {
+  refreshAir();
+  updateBadge();
+  if (view === "mine") renderMine();
+}
+
+// связь вернулась или приложение снова на экране — подключаемся либо досылаем очередь
+function wake() {
+  if (live) return void flushQueue();
+  retryMs = 5000;
+  void sync();
+}
+addEventListener("online", wake);
+document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && wake());
+
+// запись ушла в эфир — пометка «не отправлено» на плитке гаснет
+onSent(() => view === "mine" && renderMine());
+
+loadFeed().then(async (f) => {
+  setFeed(f);
+  // эфир обычно успевает до первого экрана; медленную сеть не ждём дольше 5 с — он подтянется позже
+  await Promise.race([sync(), new Promise((r) => setTimeout(r, 5000))]);
+  tuneRadio("city", false);
+  showView("home");
+  rendered = true;
+  openShortcut();
 });

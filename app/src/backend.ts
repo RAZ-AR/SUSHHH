@@ -54,10 +54,13 @@ export function audioUrl(path: string) {
   return sb!.storage.from("voices").getPublicUrl(path).data.publicUrl;
 }
 
-export async function fetchFeed(): Promise<{ posts: RemotePost[]; reactions: RemoteReaction[] }> {
-  if (!sb || !uid) return { posts: [], reactions: [] };
+export type RemoteFeed = { posts: RemotePost[]; reactions: RemoteReaction[] };
+
+// null — эфир не загрузился (нет сети или входа): попробуем позже
+export async function fetchFeed(): Promise<RemoteFeed | null> {
+  if (!sb || !uid) return null;
   const { data: posts, error } = await sb.from("posts").select("*").order("created_at", { ascending: false }).limit(500);
-  if (error || !posts) return { posts: [], reactions: [] };
+  if (error || !posts) return null;
   const { data: reactions } = await sb.from("reactions").select("post_id,user_id,emoji,at").order("created_at", { ascending: false }).limit(5000);
   return { posts: posts as RemotePost[], reactions: (reactions ?? []) as RemoteReaction[] };
 }

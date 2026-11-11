@@ -106,43 +106,65 @@ button:focus-visible, [role="button"]:focus-visible, [role="slider"]:focus-visib
 .top .chan { max-width: 70%; }
 .top .chan span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---------- круглые экраны-сторис: на ширине 2,5 круга, листаются вбок ---------- */
-.stories {
-  display: flex;
-  gap: 12px;
-  margin: 10px -16px 0;
-  padding: 6px 16px 8px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  flex: none;
-}
-.stories::-webkit-scrollbar { display: none; }
-.stories[hidden] { display: none; }
-.story {
-  flex: none;
-  width: var(--disc);
-  height: var(--disc);
-  padding: 5px;
-  border-radius: 50%;
-  background: var(--bezel);
-  box-shadow: inset 0 1px 0 #fff, 0 8px 18px rgba(0, 0, 0, 0.1);
-  scroll-snap-align: start;
+/* ---------- диапазоны и шкала настройки ---------- */
+.top .bands { flex: 1; min-width: 0; margin-top: 0; }
+.top .bands[hidden] { display: none; }
+.top > .key.sq { width: 48px; height: 56px; border-radius: 16px; flex: none; }
+.top .context { flex: 1; min-width: 0; margin-top: 0; height: 56px; }
+
+/* лента едет под неподвижной стрелкой; у каждого голоса — метка своего цвета */
+.dial {
   position: relative;
+  height: 60px;
+  margin-top: 10px;
+  border-radius: 16px;
+  background: var(--char);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45), 0 1px 0 #fff;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  flex: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.story canvas { width: 100%; height: 100%; display: block; border-radius: 50%; outline: 1.5px solid #1a1a1a; outline-offset: -1.5px; }
-.story:not(.seen)::after {
-  content: "";
+.dial:active { cursor: grabbing; }
+.dial-scale { position: absolute; left: 50%; top: 0; height: 100%; will-change: transform; }
+.dial-ticks {
   position: absolute;
-  top: 12%;
-  right: 12%;
-  width: 12px;
+  top: 9px;
+  left: -1840px;
+  width: 60000px;
   height: 12px;
-  border-radius: 50%;
-  background: var(--orange);
-  box-shadow: 0 0 0 3px var(--bezel);
+  background: repeating-linear-gradient(90deg, #6a6b64 0 1px, transparent 1px 11.5px);
 }
-.story:active { transform: scale(0.96); }
+.st {
+  position: absolute;
+  top: 5px;
+  width: 88px;
+  margin-left: -44px;
+  height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #a3a49c;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.st i { width: 3px; height: 20px; flex: none; border-radius: 2px; background: var(--hue); transition: box-shadow 0.2s; }
+.st.reply i { height: 13px; }
+.st span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st.near { color: #f4f4f0; }
+.st.near i { box-shadow: 0 0 8px 1px var(--hue); }
+.needle { position: absolute; left: 50%; top: 0; height: 29px; width: 2px; margin-left: -1px; background: var(--orange); box-shadow: 0 0 8px var(--orange); pointer-events: none; }
+.dial::before, .dial::after { content: ""; position: absolute; top: 0; bottom: 0; width: 46px; z-index: 2; pointer-events: none; }
+.dial::before { left: 0; background: linear-gradient(90deg, var(--char), transparent); }
+.dial::after { right: 0; background: linear-gradient(270deg, var(--char), transparent); }
+.dial-empty { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; color: #a3a49c; font-family: var(--mono); font-size: 10px; font-weight: 800; letter-spacing: 0.08em; }
+.dial-empty[hidden] { display: none; }
 
 /* очередь: клавиша «назад» и ряд светодиодов — пройденные, текущий, впереди */
 .context { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex: none; }
@@ -237,7 +259,43 @@ button:focus-visible, [role="button"]:focus-visible, [role="slider"]:focus-visib
 .start .ico { width: 16px; height: 16px; }
 .start[hidden] { display: none; }
 
-.scr-foot { position: absolute; left: 14px; right: 46px; bottom: 10px; z-index: 2; }
+.scr-foot { position: absolute; left: 14px; right: 14px; bottom: 10px; z-index: 2; }
+.who.call {
+  font-family: var(--sans);
+  font-weight: 300;
+  font-size: clamp(26px, 8.6vw, 36px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.who.call::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 9px;
+  border-radius: 50%;
+  background: var(--hue, var(--scr-faint));
+  box-shadow: 0 0 10px var(--hue, transparent);
+  vertical-align: 0.18em;
+}
+/* сигнал записи: деления, докуда слышно, ответы и реакции; справа — время */
+.sig { margin: 8px 0 0; display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; color: var(--scr-dim); text-transform: uppercase; white-space: nowrap; }
+.sig .grow { flex: 1; }
+.sig #sigExtra { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sig #time, .sig .radius, .sig .bars, .sig .rumor { flex: none; font-variant-numeric: tabular-nums; }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+.bars i { width: 4px; background: var(--scr-faint); border-radius: 1px; transition: background 0.25s; }
+.bars i:nth-child(1) { height: 4px; }
+.bars i:nth-child(2) { height: 6px; }
+.bars i:nth-child(3) { height: 8px; }
+.bars i:nth-child(4) { height: 10px; }
+.bars i:nth-child(5) { height: 12px; }
+.bars i.on { background: var(--orange); }
+.bars.up i.on { animation: sig-blink 0.5s steps(2) 3; }
+@keyframes sig-blink { 50% { background: var(--scr-ink); } }
+.radius { color: var(--scr-ink); font-weight: 800; }
+.rumor { color: var(--orange); font-weight: 800; }
+.rumor:empty, .radius:empty { display: none; }
 .who { margin: 0; font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--scr-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hook {
   margin: 2px 0 0;
@@ -280,6 +338,7 @@ button:focus-visible, [role="button"]:focus-visible, [role="slider"]:focus-visib
 
 .floaters { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
 .float { position: absolute; bottom: 35%; font-size: 30px; animation: rise 1.4s cubic-bezier(0.2, 0.7, 0.3, 1) forwards; }
+.float.small { font-size: 17px; opacity: 0.8; }
 .float.big { font-size: 64px; bottom: 40%; left: 50% !important; margin-left: -32px; }
 @keyframes rise {
   0% { transform: translateY(0) scale(0.6); opacity: 0; }
@@ -288,7 +347,14 @@ button:focus-visible, [role="button"]:focus-visible, [role="slider"]:focus-visib
 }
 
 /* ---------- под экраном: плашка скорости и решётка динамика ---------- */
-.strip { display: flex; align-items: center; gap: 10px; margin-top: 12px; height: 36px; flex: none; }
+.strip { display: flex; align-items: center; gap: 6px; margin-top: 12px; height: 36px; flex: none; }
+/* клавиши памяти: сохранённый голос светится своим цветом */
+.mem { width: 40px; height: 36px; flex: none; border-radius: 10px; background: #111; color: #f4f4f0; display: flex; align-items: center; justify-content: center; gap: 5px; font-family: var(--mono); font-size: 10px; font-weight: 800; }
+.mem i { width: 6px; height: 6px; border-radius: 50%; background: var(--led-off); }
+.mem.set i { background: var(--hue); box-shadow: 0 0 6px var(--hue); }
+.mem:active { transform: translateY(1px); }
+.label-pill .ico { width: 14px; height: 14px; }
+.label-pill span:empty { display: none; }
 .label-pill {
   height: 36px;
   padding: 0 12px;
@@ -371,6 +437,13 @@ button:focus-visible, [role="button"]:focus-visible, [role="slider"]:focus-visib
 .keycap.wide.orange { box-shadow: inset 0 -4px 0 var(--orange-edge); }
 .keycap.wide .cap-label { align-self: center; }
 .keycap.wide .cap-label b { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* пэды эмоций: тап — реакция, удержание — записать её своим голосом */
+.pad .cap-btn { font-size: 16px; line-height: 1; }
+.pad.rec { background: var(--orange); box-shadow: inset 0 -1px 0 var(--orange-edge); transform: translateY(2px); }
+.pad.rec small { color: var(--orange-ink); }
+.pad.own::after { content: ""; position: absolute; top: 8px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+.pad.hit .cap-btn { animation: pop 0.35s var(--spring); }
 
 /* веер реакций — над клавишами, в тёмном лотке */
 .fan {
@@ -516,6 +589,9 @@ canvas.plus { width: 160px; height: 20px; display: block; }
 .tile span { font-family: var(--mono); font-size: 10px; font-weight: 800; text-transform: uppercase; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile.new::after { content: ""; position: absolute; top: 4%; right: 8%; width: 12px; height: 12px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 3px var(--bezel); }
 .tile:active { transform: scale(0.96); }
+/* запись ждёт сети: приглушена, в углу — пустой кружок вместо точки «новое» */
+.tile.unsent canvas { opacity: 0.55; }
+.tile.unsent::after { content: ""; position: absolute; top: 4%; right: 8%; width: 12px; height: 12px; border-radius: 50%; border: 2px dashed var(--mute); box-shadow: 0 0 0 3px var(--bezel); }
 .empty { grid-column: 1 / -1; margin: 24px 0 0; text-align: center; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: var(--mute); text-transform: uppercase; letter-spacing: 0.04em; }
 .empty .ico { width: 26px; height: 26px; margin: 0 auto 10px; }
 
@@ -635,6 +711,10 @@ canvas.plus { width: 160px; height: 20px; display: block; }
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
 }
+.rumor-toggle { width: fit-content; margin: 8px auto 0; }
+.rumor-toggle[hidden] { display: none; }
+.rumor-toggle .dot { background: var(--led-off); }
+.rumor-toggle[aria-pressed="true"] .dot { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
 .rec-note { margin: 10px 0 0; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--label); text-transform: uppercase; letter-spacing: 0.04em; min-height: 15px; flex: none; }
 .rec-keys { grid-template-columns: 1fr; grid-template-rows: 112px; }
 .rec-keys.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }

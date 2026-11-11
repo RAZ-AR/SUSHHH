@@ -119,7 +119,7 @@ export function wordsAt(text: string | undefined, frac: number, n = 4) {
 const buffers = new Map<string, Promise<AudioBuffer>>();
 const MAX_BUFFERS = 4;
 
-function bufferFor(src: string) {
+export function bufferFor(src: string) {
   let b = buffers.get(src);
   if (b) {
     buffers.delete(src); // в конец очереди — недавно использован

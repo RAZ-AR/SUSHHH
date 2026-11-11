@@ -4,7 +4,7 @@ import { $ } from "./ui";
 import { requestsForMe } from "./sounds";
 import { setBadge } from "./pwa";
 import { freshToMe, myIds } from "./state";
-import { player, renderStories } from "./air";
+import { player } from "./air";
 import { renderMine } from "./mine";
 import { renderProfile } from "./profile";
 import { openRecorder } from "./recorder-ui";
@@ -25,7 +25,7 @@ export function showView(v: View) {
   } else if (v === "me") {
     player.el.pause();
     renderProfile();
-  } else renderStories();
+  }
   updateBadge();
 }
 

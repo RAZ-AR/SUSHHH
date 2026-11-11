@@ -11,7 +11,7 @@ import { $, closeSheet, escapeHtml, openSheet, toast } from "./ui";
 import { feed, freshToMe, shown } from "./state";
 import { drawRing } from "./thumbs";
 import { showView, view } from "./nav";
-import { cycleRate, openLanguages, rate, renderChannels, renderStories } from "./air";
+import { cycleRate, openLanguages, rate, refreshAir, show } from "./air";
 import { renderMine } from "./mine";
 
 // =================== личный кабинет ===================
@@ -102,7 +102,7 @@ export function renderProfile() {
       setLook(LOOKS[(LOOKS.indexOf(look) + 1) % LOOKS.length]);
       renderProfile();
       renderMine();
-      renderStories();
+      show();
     }),
     meSwitch(t("allowNoAsk"), allowsWithoutAsking(), () => {
       setAllowWithoutAsking(!allowsWithoutAsking());
@@ -133,7 +133,7 @@ function openBlocked() {
       label: name,
       onClick: () => {
         unblockAuthor(name);
-        renderChannels();
+        refreshAir();
         toast(t("unblocked", { name }));
         renderProfile();
         openBlocked();
