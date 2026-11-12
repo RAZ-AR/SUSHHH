@@ -236,9 +236,13 @@ function silence() {
   playing = false;
   ticket++;
 }
-function playBuffer(buf: AudioBuffer, onEnd: () => void) {
+let playingBuf: AudioBuffer | undefined; // что сейчас звучит
+let startedAt = 0; // время контекста, соответствующее началу записи
+function playBuffer(buf: AudioBuffer, onEnd: () => void, offset = 0) {
   silence();
   const c = audio();
+  playingBuf = buf;
+  startedAt = c.currentTime - offset;
   src = c.createBufferSource();
   src.buffer = buf;
   src.connect(analyser);
@@ -248,7 +252,7 @@ function playBuffer(buf: AudioBuffer, onEnd: () => void) {
     playing = false;
     onEnd();
   };
-  src.start();
+  src.start(0, offset);
   playing = true;
 }
 
@@ -262,17 +266,215 @@ async function playClip(clip: Clip, onEnd: () => void) {
   if (my === ticket) playBuffer(buf, onEnd);
 }
 
-async function playVoice(i: number) {
+async function playVoice(i: number, from = 0) {
+  const changed = (i + VOICES.length) % VOICES.length !== voice || !voiceBuf;
   voice = (i + VOICES.length) % VOICES.length;
   silence();
+  if (changed) {
+    voiceBuf = undefined;
+    heldF = 0;
+    if (anchor !== undefined) anchor = 0; // голос сменился — отмеченное место переезжает на начало нового
+  }
   render();
   const mine = voice;
   const buf = await load(VOICES[voice].file!);
-  if (state !== "air" || voice !== mine || !airFront()) return;
-  playBuffer(buf, () => state === "air" && void playVoice(voice + 1));
+  if (voice !== mine) return;
+  if (changed || !wave2.childElementCount) setTrack(buf);
+  if (state !== "air" || !airFront()) return;
+  if (ctx!.state === "suspended") void ctx!.resume();
+  passedF = from;
+  playBuffer(buf, () => state === "air" && void playVoice(voice + 1), from * buf.duration);
   render();
   heard.add(voice);
   void load(VOICES[(voice + 1) % VOICES.length].file!); // следующий — заранее
+}
+
+// =================== дорожка ===================
+
+// Стеклянная дорожка под овалом: волна голоса, бегунок, реакции на своих местах.
+// Касание дорожки перематывает. Реакция закрепляется там, где ты её поставил, и когда запись
+// доходит до этого места — звучит её звук и эмодзи взлетают потоком.
+type Mark = { f: number; r: Reaction; mine?: boolean; at?: number };
+const ALL_RX = [...REACTIONS, ...MEMES] as Reaction[];
+// свет у каждой реакции свой — им подсвечены стекло, кромка и след при взлёте
+const RX_COLOR: Record<string, string> = {
+  "❤️": "#ff4678", "😂": "#ffc83c", "🤗": "#ff9628", "🔥": "#ff6a28", "😮": "#3cbeff", "👏": "#ffb43c",
+  "🥁": "#e08a4c", "🎺": "#ffd03c", "🦗": "#3cdc82", "😱": "#3cbeff", "📯": "#ffb43c", "🎉": "#af46ff",
+};
+const rxColor = (r: string) => RX_COLOR[r] ?? "#ff4678";
+
+// реакции других людей — по нескольку на каждый голос, на устойчивых местах
+const marks = new Map<string, Mark[]>();
+function marksFor(id: string): Mark[] {
+  let list = marks.get(id);
+  if (!list) {
+    let h = 0;
+    for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const rnd = () => ((h = (h * 1103515245 + 12345) >>> 0) % 1000) / 1000;
+    list = Array.from({ length: 3 + Math.floor(rnd() * 3) }, () => ({ f: 0.08 + rnd() * 0.84, r: REACTIONS[Math.floor(rnd() * REACTIONS.length)] }));
+    marks.set(id, list);
+  }
+  return list;
+}
+
+const track = $("track");
+const wave1 = $("wave");
+const wave2 = $("waveLit");
+const pins = $("pins");
+let voiceBuf: AudioBuffer | undefined; // запись голоса на дорожке
+let heldF = 0; // место на дорожке, когда звук не идёт
+let passedF = 0; // докуда запись уже проиграна — от этого места ищем реакции, которые пора проиграть
+let anchor: number | undefined; // куда встанет реакция, пока открыта панель
+let scrubF: number | undefined; // палец ведёт по дорожке
+
+// огибающая голоса: 56 столбиков
+const envs = new WeakMap<AudioBuffer, number[]>();
+function envelope(buf: AudioBuffer) {
+  let env = envs.get(buf);
+  if (!env) {
+    const ch = buf.getChannelData(0);
+    const n = 56;
+    const step = Math.floor(ch.length / n);
+    env = Array.from({ length: n }, (_, i) => {
+      let sum = 0;
+      for (let j = i * step; j < (i + 1) * step; j += 16) sum += ch[j] * ch[j];
+      return Math.sqrt(sum / (step / 16));
+    });
+    const max = Math.max(...env, 1e-4);
+    env = env.map((v) => 0.12 + 0.88 * Math.min(1, v / max));
+    envs.set(buf, env);
+  }
+  return env;
+}
+function setTrack(buf: AudioBuffer) {
+  voiceBuf = buf;
+  const bars = envelope(buf).map((h) => `<i style="--h:${h.toFixed(2)}"></i>`).join("");
+  wave1.innerHTML = wave2.innerHTML = bars;
+  drawPins();
+}
+// где сейчас бегунок, 0..1
+function trackF() {
+  if (scrubF !== undefined) return scrubF;
+  if (src && playingBuf && playingBuf === voiceBuf && ctx) return Math.min(1, Math.max(0, (ctx.currentTime - startedAt) / playingBuf.duration));
+  return heldF;
+}
+function drawPins(fresh?: Mark) {
+  const id = VOICES[voice].id;
+  pins.innerHTML = marksFor(id)
+    .map(
+      (m, i) =>
+        `<span class="pin${m.mine ? " mine" : ""}${m === fresh ? " new" : ""}" data-i="${i}" style="--x:${m.f.toFixed(4)};--ec:${rxColor(m.r)}">${m.r}</span>`,
+    )
+    .join("");
+}
+function seek(f: number) {
+  f = Math.min(0.999, Math.max(0, f));
+  heldF = f;
+  passedF = f;
+  if (trayOpen) anchor = f;
+  if (voiceBuf) void playVoice(voice, f);
+}
+const fAt = (x: number) => {
+  const r = track.getBoundingClientRect();
+  return (x - r.left - 16) / (r.width - 32);
+};
+track.addEventListener("pointerdown", (e) => {
+  if (state !== "air") return;
+  track.setPointerCapture(e.pointerId);
+  scrubF = Math.min(1, Math.max(0, fAt(e.clientX)));
+});
+track.addEventListener("pointermove", (e) => {
+  if (scrubF !== undefined) scrubF = Math.min(1, Math.max(0, fAt(e.clientX)));
+});
+const endScrub = () => {
+  if (scrubF === undefined) return;
+  const f = scrubF;
+  scrubF = undefined;
+  seek(f);
+};
+track.addEventListener("pointerup", endScrub);
+track.addEventListener("pointercancel", endScrub);
+track.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    seek(trackF() + (e.key === "ArrowRight" ? 0.05 : -0.05));
+  }
+});
+
+// точка на дорожке в координатах экрана — оттуда взлетают эмодзи
+function trackPoint(f: number) {
+  const r = track.getBoundingClientRect();
+  const sr = stage.getBoundingClientRect();
+  return { x: r.left - sr.left + 16 + f * (r.width - 32), y: r.top - sr.top - 10 };
+}
+
+// Поток эмодзи как в стримах: каждый поднимается от места на дорожке, покачиваясь вбок,
+// раздувается на старте и тает к концу. Свой — пачкой, чужие — по одному-два.
+function stream(r: Reaction, f: number, count: number) {
+  if (calm) return;
+  const { x, y } = trackPoint(f);
+  const rise = stage.clientHeight;
+  for (let n = 0; n < count; n++) {
+    setTimeout(() => {
+      const el = document.createElement("span");
+      el.className = "flyer";
+      el.textContent = r;
+      el.style.setProperty("--ec", rxColor(r));
+      stage.append(el);
+      const up = rise * (0.38 + Math.random() * 0.2);
+      const amp = 10 + Math.random() * 18;
+      const ph = Math.random() * Math.PI * 2;
+      const big = 0.95 + Math.random() * 0.35;
+      const kf: Keyframe[] = [];
+      for (let k = 0; k <= 12; k++) {
+        const p = k / 12;
+        const sway = Math.sin(p * Math.PI * 2.4 + ph) * amp * Math.min(1, p * 3);
+        const lift = up * (1 - (1 - p) ** 1.6);
+        const sc = p < 0.12 ? 0.3 + (p / 0.12) * 0.95 * big : big * (1.25 - 0.3 * p);
+        kf.push({
+          transform: `translate(${(x + sway).toFixed(1)}px, ${(y - lift).toFixed(1)}px) translate(-50%, -50%) rotate(${(Math.sin(p * 7 + ph) * 14).toFixed(1)}deg) scale(${sc.toFixed(3)})`,
+          opacity: p < 0.06 ? p / 0.06 : p > 0.68 ? Math.max(0, 1 - (p - 0.68) / 0.32) : 1,
+        });
+      }
+      el.animate(kf, { duration: 2100 + Math.random() * 900, easing: "linear" }).finished.then(() => el.remove());
+    }, n * 120);
+  }
+}
+
+// звук чужих реакций тише голоса, свой — в полную силу
+let quiet: GainNode | undefined;
+function rxOut(soft: boolean) {
+  const c = audioCtx();
+  void c.resume();
+  if (!soft) return c.destination;
+  if (!quiet) {
+    quiet = c.createGain();
+    quiet.gain.value = 0.45;
+    quiet.connect(c.destination);
+  }
+  return quiet;
+}
+
+// запись дошла до реакции — она звучит и взлетает
+function pass(f: number) {
+  if (!playing || state !== "air" || !voiceBuf) {
+    passedF = f;
+    return;
+  }
+  if (f < passedF) passedF = f;
+  const now = performance.now();
+  const list = marksFor(VOICES[voice].id);
+  list.forEach((m, i) => {
+    if (m.f > passedF && m.f <= f && !(m.at && now - m.at < 1500)) {
+      playReaction(m.r, rxOut(!m.mine));
+      stream(m.r, m.f, m.mine ? 2 : 1 + Math.round(Math.random()));
+      const pin = pins.querySelector<HTMLElement>(`.pin[data-i="${i}"]`);
+      pin?.classList.remove("ping");
+      void pin?.offsetWidth;
+      pin?.classList.add("ping");
+    }
+  });
+  passedF = f;
 }
 
 // запись: микрофон → анализатор (в динамики не идёт) и MediaRecorder
@@ -475,6 +677,10 @@ function render() {
           `<button class="st${i === voice ? " on" : heard.has(i) ? " heard" : ""}" data-i="${i}" aria-label="Слушать: ${p.name}"${i === voice ? ' aria-current="true"' : ""}>
              <span class="oval"><span class="nm">${p.name}</span></span></button>`,
       ).join("");
+  if (voiceBuf === undefined) {
+    wave1.innerHTML = wave2.innerHTML = "";
+    drawPins();
+  }
   $("stories").querySelector(".on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: calm ? "auto" : "smooth" });
   setBtn($("back"), ICON.close, "Назад в эфир", state === "rec" || state === "review");
   if (state !== "review") $("leftl").textContent = $("rightl").textContent = "";
@@ -539,44 +745,34 @@ $("fx").onclick = (e) => {
   if (id) void pickFx(id);
 };
 
-// Аудио-эмодзи: сердце раскрывает панель со всеми реакциями. Касание — звук реакции,
-// эмодзи взлетает над овалом, сердце остаётся отмеченным.
+// Аудио-эмодзи: сердце раскрывает панель со всеми реакциями и запоминает место на дорожке —
+// туда встанет выбранная реакция. Касание дорожки, пока панель открыта, переставляет это место.
 let trayOpen = false;
 const tray = $("tray");
-tray.innerHTML = [...REACTIONS, ...MEMES].map((r) => `<button class="rx" data-r="${r}" aria-label="Реакция ${r}">${r}</button>`).join("");
+tray.innerHTML = ALL_RX.map(
+  (r, i) => `<button class="rx" data-r="${r}" style="--i:${i};--ec:${rxColor(r)}" aria-label="Реакция ${r}"><span class="e">${r}</span></button>`,
+).join("");
 function openTray() {
   trayOpen = true;
+  anchor = trackF();
   tray.classList.add("open");
 }
 function closeTray() {
   trayOpen = false;
+  anchor = undefined;
   tray.classList.remove("open");
 }
 tray.onclick = (e) => {
   const r = (e.target as HTMLElement).closest<HTMLElement>(".rx")?.dataset.r as Reaction | undefined;
   if (!r) return;
-  const c = audioCtx();
-  void c.resume();
-  playReaction(r, c.destination);
+  const f = anchor ?? trackF();
+  const mark: Mark = { f, r, mine: true, at: performance.now() };
+  marksFor(VOICES[voice].id).push(mark);
+  playReaction(r, rxOut(false));
+  stream(r, f, 5);
+  drawPins(mark);
   liked.add(voice);
   bump = 1;
-  if (!calm) {
-    const fly = document.createElement("span");
-    fly.className = "flyer";
-    fly.textContent = r;
-    stage.append(fly);
-    const x = (Math.random() - 0.5) * 120;
-    fly
-      .animate(
-        [
-          { translate: "-50% 40px", scale: 0.4, opacity: 0 },
-          { translate: `calc(-50% + ${x * 0.4}px) -60px`, scale: 1.1, opacity: 1, offset: 0.25 },
-          { translate: `calc(-50% + ${x}px) -260px`, scale: 0.9, opacity: 0 },
-        ],
-        { duration: 1400, easing: "cubic-bezier(0.2, 0.7, 0.3, 1)" },
-      )
-      .finished.then(() => fly.remove());
-  }
   render();
 };
 $("chan").onclick = () => openSheet("channels");
@@ -613,9 +809,9 @@ function drag(dx: number, dy: number) {
   stage.style.setProperty("--dy", `${dy}px`);
 }
 stage.addEventListener("pointerdown", (e) => {
-  down = state !== "air" || (e.target as HTMLElement).closest("button, .sheet, .scrim, .page, .dock, .stories, .fx, .tray") ? undefined : { x: e.clientX, y: e.clientY };
+  down = state !== "air" || (e.target as HTMLElement).closest("button, .sheet, .scrim, .page, .dock, .stories, .fx, .tray, .track") ? undefined : { x: e.clientX, y: e.clientY };
   if (down) stage.classList.add("dragging");
-  if (trayOpen && !(e.target as HTMLElement).closest(".tray, #left")) {
+  if (trayOpen && !(e.target as HTMLElement).closest(".tray, #left, .track")) {
     closeTray();
     render();
   }
@@ -709,6 +905,14 @@ function frame(t: number) {
   for (let i = 0; i < 3; i++) cur.c[i] += (tg.c[i] - cur.c[i]) * slow;
 
   const st = stage.style;
+  if (state === "air") {
+    const f = trackF();
+    track.style.setProperty("--p", f.toFixed(4));
+    track.style.setProperty("--a", String(anchor ?? -1));
+    track.classList.toggle("anchoring", anchor !== undefined);
+    track.setAttribute("aria-valuenow", String(Math.round(f * 100)));
+    if (scrubF === undefined) pass(f);
+  }
   st.setProperty("--lv", level.toFixed(3));
   st.setProperty("--s", (cur.s + bump * 0.12).toFixed(4));
   st.setProperty("--b", cur.b.toFixed(3));
@@ -725,4 +929,8 @@ function frame(t: number) {
 }
 
 render();
+// волна первого голоса видна сразу, ещё до первого касания
+void load(VOICES[0].file!).then((b) => {
+  if (!voiceBuf && voice === 0) setTrack(b);
+});
 requestAnimationFrame(frame);
