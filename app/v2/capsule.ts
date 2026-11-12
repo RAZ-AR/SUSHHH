@@ -1,0 +1,728 @@
+// Прототип «капсула», тёмная версия: капсула — тёмное стекло, внутри со дна поднимается сияние голоса.
+// Сияние рисует библиотека voice-glow (libraries.dev/voice). Эфир — полный спектр с розовым в центре,
+// твой голос — зелёный. Записано: капсула сжимается, вокруг расходятся контуры.
+// Отправка: лепестки собираются в один луч, и он ходит из стороны в сторону.
+// Голоса — демо-записи из public/seed; сервера нет, запись живёт до перезагрузки.
+
+import "@fontsource/inter-tight/300.css";
+import "@fontsource/inter-tight/400.css";
+import { createElement, Fragment } from "react";
+import { createRoot } from "react-dom/client";
+import { LOBE_SPAN, VoiceBeam } from "voice-glow";
+import { audioCtx } from "../src/audio";
+import { MEMES, REACTIONS, playReaction, type Reaction } from "../src/reactions";
+import { MY_POSTS, ME, POSTS, type Clip } from "./capsule-data";
+import { airFront, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const VOICES = POSTS;
+// Цвет голоса: розовый — слушаешь, зелёный — говоришь. Им светятся отсвет на экране и контуры.
+type RGB = [number, number, number];
+const HOT: RGB = [255, 70, 120];
+const LIVE: RGB = [60, 220, 130];
+const maxRec = () => (target.kind === "post" ? 30 : 15); // пост — до 30 секунд, ответ — до 15
+
+const ICON = {
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
+  next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l6-6 6 6"/></svg>',
+  again: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4.5h4.5"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  thread: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 12a7.5 7.5 0 0 1-11.3 6.5L4.5 19.5l1.1-3.9A7.5 7.5 0 1 1 20 12z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+};
+
+type State = "air" | "rec" | "review" | "sending" | "sent";
+let state: State = "air";
+let voice = 0;
+let playing = false;
+let target: Target = { kind: "reply", post: POSTS[0] }; // что записываем: ответ на голос или новый пост
+let channelName = "Для тебя";
+const liked = new Set<number>();
+const heard = new Set<number>(); // что уже слушали — овал в сторис бледнеет
+
+const stage = $("stage");
+
+// =================== свечение (voice-glow) ===================
+
+// тема: тёмная или светлая. По умолчанию — как в системе, выбор запоминается на устройстве
+type Theme = "dark" | "light";
+const THEME_KEY = "sushhh.proto.theme";
+function readTheme(): Theme {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "dark" || saved === "light") return saved;
+  } catch {
+    // без хранилища — по системе
+  }
+  return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+let theme = readTheme();
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#f1f1ef" : "#0b0b0c");
+}
+applyTheme();
+function toggleTheme() {
+  theme = theme === "dark" ? "light" : "dark";
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // не сохранится, но тема сменится сейчас
+  }
+  applyTheme();
+  render();
+}
+// на белом стекле сияние мягче: без белой сердцевины и яркого гребня, иначе цвет выгорает
+const glowLook = () => (theme === "light" ? { coreSize: 0.5, bandStrength: 0.8, brightness: 1, saturation: 1.2 } : {});
+
+// лепестки сияния, от центра к краям. Эфир — полный спектр библиотеки с розовым в центре,
+// твой голос — зелёный в центре и холодные соседи
+const GLOW = {
+  pink: ["#ff4678", "#3cbeff", "#af46ff", "#ff9628", "#ff6ad5", "#7a5cff", "#ffd03c"],
+  green: ["#3cdc82", "#b4f03c", "#28c8b4", "#3cbeff", "#8ce63c", "#1ea0a0", "#e6f03c"],
+};
+const beamRoot = createRoot($("cap"));
+let beamKey = "";
+function paintBeam() {
+  const key = state === "air" ? "pink" : "green";
+  if (key + theme === beamKey) return;
+  beamKey = key + theme;
+  beamRoot.render(
+    createElement(VoiceBeam, {
+        type: "mobile",
+        theme: "dark",
+        ...glowLook(),
+        colors: GLOW[key],
+        // громкость считаем сами (эфир играет из буфера, не из потока), библиотека читает её каждый кадр
+        level: () =>
+          state === "sending" || state === "sent"
+            ? 0.5
+            : // в тишине капсула не гаснет: слабый свет медленно дышит на дне
+              Math.max(level, calm ? 0.14 : 0.14 + 0.05 * Math.sin(performance.now() / 900)),
+        // «летит…»: лепестки собраны в луч, он качается из стороны в сторону
+        motion: () => (state === "sending" ? { gather: 1, offset: Math.sin(performance.now() / 380) * 0.7, stretch: 0.4, heldLevel: 0.6 } : null),
+        scale: 1.7,
+        reach: 3.4,
+        rangeHeight: 1.5,
+        idle: 0.55,
+        hueRange: calm ? 0 : 10,
+        flow: calm ? 0 : 48,
+        attack: 0.12,
+        release: 0.5,
+        children: createElement("div", { className: "cap-fill" }),
+      }),
+  );
+}
+
+// =================== dock ===================
+
+// Стеклянная панель разделов. Сияние собрано в луч под выбранным разделом, переезжает при смене
+// и поднимается от громкости. Микрофон справа: в эфире это ответ на голос, который звучит, в «Моём» — новая запись.
+// Новую запись из эфира начинает первый овал в ряду сторис.
+const DOCK_SCALE = 0.7;
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "air", label: "Эфир", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13.5" width="4.5" height="6.5" rx="2"/><rect x="16.5" y="13.5" width="4.5" height="6.5" rx="2"/></svg>' },
+  { id: "mine", label: "Моё", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 13.5l2.6-8A1.5 1.5 0 0 1 8 4.5h8a1.5 1.5 0 0 1 1.4 1L20 13.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/><path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20"/></svg>' },
+];
+const dockRoot = createRoot($("dock"));
+let dockAt = 0; // где сейчас луч, в долях от −1 до 1 по ширине панели
+function dockMotion() {
+  const want = ((TABS.findIndex((t) => t.id === getTab()) + 0.5) / TABS.length - 0.5) * 2;
+  dockAt += (want - dockAt) * (calm ? 1 : 0.16);
+  const beam = $("dock").querySelector<HTMLElement>(".dock-beam");
+  // библиотека сама растягивает сияние по ширине от громкости (--vb-w) — делим на это, чтобы луч не уезжал за раздел
+  const widen = Number(beam?.getAttribute("style")?.match(/--vb-w-[^:]*:\s*([\d.]+)/)?.[1]) || 1;
+  const px = (dockAt * (beam?.offsetWidth ?? 0)) / 2;
+  return { gather: 1, offset: px / widen / ((LOBE_SPAN * DOCK_SCALE) / 2), stretch: Math.min(1, Math.abs(want - dockAt) * 2), heldLevel: 0.34 + level * 0.66 };
+}
+function paintDock() {
+  const tab = getTab();
+  const mic = tab === "air" ? "Ответить голосом" : "Записать новый голос";
+  dockRoot.render(
+    createElement(
+      Fragment,
+      null,
+      createElement(VoiceBeam, {
+        className: "dock-beam",
+        type: "default",
+        theme: "dark",
+        ...glowLook(),
+        colors: GLOW[tab === "mine" ? "green" : "pink"],
+        scale: DOCK_SCALE,
+        level: () => 0.34 + level * 0.66,
+        motion: dockMotion,
+        hueRange: calm ? 0 : 10,
+        children: createElement(
+          "div",
+          { className: "dock-bar" },
+          TABS.map((t) =>
+            createElement(
+              "button",
+              { key: t.id, className: `dock-tab${t.id === tab ? " on" : ""}`, "aria-current": t.id === tab ? "page" : undefined, onClick: () => showTab(t.id) },
+              createElement("span", {
+                className: "dock-ico",
+                dangerouslySetInnerHTML: { __html: t.icon + (t.id === "mine" && inboxCount() ? `<b class="badge">${inboxCount()}</b>` : "") },
+              }),
+              t.label,
+            ),
+          ),
+        ),
+      }),
+      // микрофон — отдельное стекло со своим сиянием: зелёным, как твой голос, и со своим ритмом
+      createElement(VoiceBeam, {
+        className: "mic-beam",
+        type: "pill",
+        theme: "dark",
+        ...glowLook(),
+        colors: GLOW.green,
+        borderRadius: 32,
+        level: () => (calm ? 0.45 : 0.46 + 0.3 * Math.sin(performance.now() / 640) + 0.1 * Math.sin(performance.now() / 173)),
+        hueRange: calm ? 0 : 14,
+        children: createElement("button", {
+        className: "main",
+        "aria-label": mic,
+        title: mic,
+        onClick: () => void startRec(tab === "air" ? { kind: "reply", post: VOICES[voice] } : { kind: "post" }),
+        dangerouslySetInnerHTML: { __html: ICON.mic },
+      }),
+      }),
+    ),
+  );
+}
+
+// =================== звук ===================
+
+let ctx: AudioContext | undefined;
+let analyser: AnalyserNode;
+let wave: Float32Array<ArrayBuffer>;
+function audio() {
+  if (!ctx) {
+    ctx = new AudioContext();
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    wave = new Float32Array(analyser.fftSize);
+  }
+  void ctx.resume();
+  return ctx;
+}
+
+const buffers = new Map<string, Promise<AudioBuffer>>();
+const load = (file: string) => {
+  let p = buffers.get(file);
+  if (!p) {
+    p = fetch(`${import.meta.env.BASE_URL}seed/${file}.m4a`)
+      .then((r) => r.arrayBuffer())
+      .then((b) => audio().decodeAudioData(b));
+    buffers.set(file, p);
+  }
+  return p;
+};
+
+let src: AudioBufferSourceNode | undefined;
+function silence() {
+  if (src) {
+    src.onended = null;
+    src.stop();
+    src.disconnect();
+    src = undefined;
+  }
+  playing = false;
+  ticket++;
+}
+function playBuffer(buf: AudioBuffer, onEnd: () => void) {
+  silence();
+  const c = audio();
+  src = c.createBufferSource();
+  src.buffer = buf;
+  src.connect(analyser);
+  analyser.connect(c.destination);
+  src.onended = () => {
+    src = undefined;
+    playing = false;
+    onEnd();
+  };
+  src.start();
+  playing = true;
+}
+
+// запись из листа (ветка, «Моё»): демо-файл или то, что записано в прототипе
+let ticket = 0;
+async function playClip(clip: Clip, onEnd: () => void) {
+  silence();
+  const my = ++ticket;
+  if (!clip.buf && !clip.file) return void setTimeout(() => my === ticket && onEnd(), 900); // записано без микрофона — звука нет
+  const buf = clip.buf ?? (await load(clip.file!));
+  if (my === ticket) playBuffer(buf, onEnd);
+}
+
+async function playVoice(i: number) {
+  voice = (i + VOICES.length) % VOICES.length;
+  silence();
+  render();
+  const mine = voice;
+  const buf = await load(VOICES[voice].file!);
+  if (state !== "air" || voice !== mine || !airFront()) return;
+  playBuffer(buf, () => state === "air" && void playVoice(voice + 1));
+  render();
+  heard.add(voice);
+  void load(VOICES[(voice + 1) % VOICES.length].file!); // следующий — заранее
+}
+
+// запись: микрофон → анализатор (в динамики не идёт) и MediaRecorder
+let mic: MediaStream | undefined;
+let micNode: MediaStreamAudioSourceNode | undefined;
+let recorder: MediaRecorder | undefined;
+let chunks: Blob[] = [];
+let take: AudioBuffer | undefined; // записанный ответ
+let noMic = false; // нет доступа к микрофону — капсула дышит сама, чтобы прототип можно было посмотреть
+let recStart = 0;
+let recLen = 0;
+
+// Эффекты для своей записи. Считаются заранее целиком (OfflineAudioContext): то, что слышно
+// при прослушивании, и уходит в эфир.
+const FX = [
+  { id: "none", name: "Без эффекта" },
+  { id: "echo", name: "Эхо" },
+  { id: "hall", name: "Зал" },
+  { id: "low", name: "Ниже" },
+  { id: "high", name: "Выше" },
+  { id: "radio", name: "Радио" },
+] as const;
+type Fx = (typeof FX)[number]["id"];
+let fx: Fx = "none";
+let fxBuf: AudioBuffer | undefined; // запись с эффектом
+const finalTake = () => fxBuf ?? take;
+
+async function renderFx(buf: AudioBuffer, id: Fx): Promise<AudioBuffer> {
+  if (id === "none") return buf;
+  const rate = id === "low" ? 0.84 : id === "high" ? 1.22 : 1;
+  const tail = id === "echo" ? 1.4 : id === "hall" ? 1.8 : 0;
+  const sr = buf.sampleRate;
+  const off = new OfflineAudioContext(1, Math.ceil((buf.duration / rate + tail) * sr), sr);
+  const src = off.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = rate;
+  let dry: AudioNode = src;
+  if (id === "echo") {
+    const delay = off.createDelay(1);
+    delay.delayTime.value = 0.24;
+    const back = off.createGain();
+    back.gain.value = 0.38;
+    const wet = off.createGain();
+    wet.gain.value = 0.6;
+    src.connect(delay);
+    delay.connect(back).connect(delay);
+    delay.connect(wet).connect(off.destination);
+  } else if (id === "hall") {
+    // зал: свёртка с затухающим шумом
+    const len = Math.ceil(sr * 1.8);
+    const ir = off.createBuffer(1, len, sr);
+    const ch = ir.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2.6;
+    const conv = off.createConvolver();
+    conv.buffer = ir;
+    const wet = off.createGain();
+    wet.gain.value = 0.45;
+    src.connect(conv).connect(wet).connect(off.destination);
+  } else if (id === "radio") {
+    const hp = off.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 450;
+    const lp = off.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 2600;
+    const gain = off.createGain();
+    gain.gain.value = 1.6;
+    dry = src.connect(hp).connect(lp).connect(gain);
+  }
+  dry.connect(off.destination);
+  src.start();
+  return off.startRendering();
+}
+
+let fxTicket = 0;
+async function pickFx(id: Fx) {
+  if (!take) return;
+  fx = id;
+  silence();
+  render();
+  const my = ++fxTicket;
+  const buf = await renderFx(take, id);
+  if (my !== fxTicket || state !== "review") return;
+  fxBuf = id === "none" ? undefined : buf;
+  playBuffer(buf, render); // сразу даём услышать, что получилось
+  render();
+}
+
+async function startRec(t: Target = target) {
+  target = t;
+  silence();
+  const c = audio();
+  take = fxBuf = undefined;
+  fx = "none";
+  noMic = false;
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+    try {
+      analyser.disconnect();
+    } catch {
+      // ещё не подключён
+    }
+    micNode = c.createMediaStreamSource(mic);
+    micNode.connect(analyser);
+    chunks = [];
+    recorder = new MediaRecorder(mic);
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.start();
+  } catch {
+    noMic = true;
+  }
+  recStart = performance.now();
+  state = "rec";
+  render();
+}
+
+function stopRec() {
+  recLen = Math.min(maxRec(), (performance.now() - recStart) / 1000);
+  const rec = recorder;
+  if (rec && rec.state !== "inactive") {
+    rec.onstop = async () => {
+      try {
+        take = await audio().decodeAudioData(await new Blob(chunks, { type: rec.mimeType }).arrayBuffer());
+        render();
+      } catch {
+        // не расшифровалось — прослушать нельзя, отправить можно
+      }
+    };
+    rec.stop();
+  }
+  micNode?.disconnect();
+  mic?.getTracks().forEach((t) => t.stop());
+  mic = micNode = recorder = undefined;
+  state = "review";
+  render();
+  // микрофона нет — подставляем демо-запись, чтобы прослушивание и эффекты можно было посмотреть
+  if (noMic)
+    void load("s7").then((buf) => {
+      if (state !== "review" || take) return;
+      take = buf;
+      recLen = buf.duration;
+      render();
+    });
+}
+
+function send() {
+  silence();
+  state = "sending";
+  render();
+  setTimeout(() => {
+    // записанное остаётся в прототипе: ответ — в ветке, пост — в «Моём»
+    const id = `m${Date.now()}`;
+    if (target.kind === "reply") target.post.replies.push({ id, name: ME, mine: true, buf: finalTake(), text: `Твой ответ · ${fmt(recLen)}` });
+    else MY_POSTS.push({ id, name: ME, mine: true, buf: finalTake(), hook: `Новая запись · ${fmt(recLen)}`, text: "", replies: [] });
+    state = "sent";
+    render();
+    setTimeout(() => {
+      state = "air";
+      void playVoice(voice + 1);
+    }, 1400);
+  }, 1900);
+}
+
+function backToAir() {
+  if (state === "rec") stopRec();
+  silence();
+  state = "air";
+  void playVoice(voice);
+}
+
+// =================== экран ===================
+
+const fmt = (s: number) => `0:${String(Math.floor(s)).padStart(2, "0")}`;
+
+function setBtn(el: HTMLElement, icon: string, aria: string, show = true) {
+  el.innerHTML = icon;
+  el.setAttribute("aria-label", aria);
+  el.hidden = !show;
+}
+
+function render() {
+  paintBeam();
+  paintDock();
+  stage.classList.toggle("busy", state !== "air");
+  $("bottom").classList.toggle("air", state === "air");
+  const v = VOICES[voice];
+  const main = $<HTMLButtonElement>("main");
+  const replying = state !== "air";
+  const air = state === "air";
+  $("who").textContent = air ? v.name : target.kind === "post" ? "новая запись" : `ответ для ${target.post.name}`;
+  $("chan").innerHTML = `${channelName} ${ICON.down}`;
+  $("chan").hidden = !air;
+  $("hook").textContent = replying ? "" : v.hook;
+  // сторис: первый овал — ты (новая запись), дальше голоса эфира; текущий обведён и светится в такт
+  $("stories").innerHTML = replying
+    ? ""
+    : `<button class="st me" data-i="new" aria-label="Записать новый голос"><span class="oval">${ICON.plus}<span class="nm">ты</span></span></button>` +
+      VOICES.map(
+        (p, i) =>
+          `<button class="st${i === voice ? " on" : heard.has(i) ? " heard" : ""}" data-i="${i}" aria-label="Слушать: ${p.name}"${i === voice ? ' aria-current="true"' : ""}>
+             <span class="oval"><span class="nm">${p.name}</span></span></button>`,
+      ).join("");
+  $("stories").querySelector(".on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: calm ? "auto" : "smooth" });
+  setBtn($("back"), ICON.close, "Назад в эфир", state === "rec" || state === "review");
+  if (state !== "review") $("leftl").textContent = $("rightl").textContent = "";
+  // эффекты — только когда запись готова
+  $("fx").innerHTML =
+    state === "review" && take ? FX.map((f) => `<button class="fxb" data-fx="${f.id}" aria-pressed="${f.id === fx}">${f.name}</button>`).join("") : "";
+  if (state !== "air") closeTray();
+  main.disabled = state === "sending" || state === "sent";
+
+  if (state === "air") {
+    setBtn(main, ICON.mic, "Ответить голосом");
+    $("label").textContent = "ответить";
+    setBtn($("left"), ICON.heart, "Аудио-реакции");
+    $("left").classList.toggle("on", liked.has(voice));
+    $("left").setAttribute("aria-expanded", String(trayOpen));
+    setBtn($("right"), ICON.thread + (v.replies.length ? `<b class="badge">${v.replies.length}</b>` : ""), "Ветка ответов");
+    $("hint").textContent = playing ? "" : "коснись — и эфир заиграет";
+  } else if (state === "rec") {
+    setBtn(main, ICON.stop, "Остановить запись");
+    $("label").textContent = "стоп";
+    setBtn($("left"), "", "", false);
+    setBtn($("right"), "", "", false);
+    $("left").classList.remove("on");
+  } else if (state === "review") {
+    setBtn(main, ICON.send, "Опубликовать");
+    $("label").textContent = "опубликовать";
+    setBtn($("left"), ICON.again, "Переписать");
+    $("left").classList.remove("on");
+    setBtn($("right"), playing ? ICON.stop : ICON.play, playing ? "Остановить" : "Послушать", !!take);
+    $("leftl").textContent = "переписать";
+    $("rightl").textContent = !take ? "" : playing ? "стоп" : "послушать";
+    $("hint").textContent = `${fmt(recLen)} · ${noMic ? "демо-запись, микрофон недоступен" : "пока слышно только тебе"}`;
+  } else {
+    setBtn($("left"), "", "", false);
+    setBtn($("right"), "", "", false);
+    $("label").textContent = state === "sending" ? "летит…" : "в эфире";
+    $("hint").textContent = state !== "sent" ? "" : target.kind === "post" ? "твой голос в эфире" : `${target.post.name} услышит твой ответ`;
+  }
+}
+
+$("main").onclick = () => {
+  if (state === "rec") stopRec();
+  else if (state === "review") send();
+};
+$("left").onclick = () => {
+  if (state === "air") {
+    trayOpen ? closeTray() : openTray();
+    render();
+  } else if (state === "review") void startRec();
+};
+$("right").onclick = () => {
+  if (state === "air") openSheet("thread", VOICES[voice]);
+  else if (state === "review" && take) {
+    if (playing) silence();
+    else playBuffer(finalTake()!, render);
+    render();
+  }
+};
+$("back").onclick = backToAir;
+$("fx").onclick = (e) => {
+  const id = (e.target as HTMLElement).closest<HTMLElement>(".fxb")?.dataset.fx as Fx | undefined;
+  if (id) void pickFx(id);
+};
+
+// Аудио-эмодзи: сердце раскрывает панель со всеми реакциями. Касание — звук реакции,
+// эмодзи взлетает над овалом, сердце остаётся отмеченным.
+let trayOpen = false;
+const tray = $("tray");
+tray.innerHTML = [...REACTIONS, ...MEMES].map((r) => `<button class="rx" data-r="${r}" aria-label="Реакция ${r}">${r}</button>`).join("");
+function openTray() {
+  trayOpen = true;
+  tray.classList.add("open");
+}
+function closeTray() {
+  trayOpen = false;
+  tray.classList.remove("open");
+}
+tray.onclick = (e) => {
+  const r = (e.target as HTMLElement).closest<HTMLElement>(".rx")?.dataset.r as Reaction | undefined;
+  if (!r) return;
+  const c = audioCtx();
+  void c.resume();
+  playReaction(r, c.destination);
+  liked.add(voice);
+  bump = 1;
+  if (!calm) {
+    const fly = document.createElement("span");
+    fly.className = "flyer";
+    fly.textContent = r;
+    stage.append(fly);
+    const x = (Math.random() - 0.5) * 120;
+    fly
+      .animate(
+        [
+          { translate: "-50% 40px", scale: 0.4, opacity: 0 },
+          { translate: `calc(-50% + ${x * 0.4}px) -60px`, scale: 1.1, opacity: 1, offset: 0.25 },
+          { translate: `calc(-50% + ${x}px) -260px`, scale: 0.9, opacity: 0 },
+        ],
+        { duration: 1400, easing: "cubic-bezier(0.2, 0.7, 0.3, 1)" },
+      )
+      .finished.then(() => fly.remove());
+  }
+  render();
+};
+$("chan").onclick = () => openSheet("channels");
+$("stories").onclick = (e) => {
+  const i = (e.target as HTMLElement).closest<HTMLElement>(".st")?.dataset.i;
+  if (i === "new") void startRec({ kind: "post" });
+  else if (i !== undefined) void playVoice(Number(i));
+};
+
+initScreens({
+  play: (clip, onEnd) => void playClip(clip, onEnd),
+  stop: silence,
+  record: (t) => void startRec(t),
+  resume: () => state === "air" && void playVoice(voice),
+  setChannel: (name) => {
+    channelName = name;
+    void playVoice(0);
+  },
+  refresh: render,
+  theme: () => theme,
+  toggleTheme,
+});
+
+// Главный экран управляется смахиванием: вверх и вниз — следующий и предыдущий голос, вбок — соседний канал,
+// касание — пауза. Овал тянется за пальцем и влетает с той стороны, куда листали.
+let down: { x: number; y: number } | undefined;
+function flyIn(x: number, y: number) {
+  if (calm) return;
+  for (const el of stage.querySelectorAll<HTMLElement>(".cap, .halo"))
+    el.animate([{ translate: `calc(-50% + ${x}px) calc(-50% + ${y}px)`, opacity: 0 }, {}], { duration: 320, easing: "cubic-bezier(0.2, 0.9, 0.25, 1)" });
+}
+function drag(dx: number, dy: number) {
+  stage.style.setProperty("--dx", `${dx}px`);
+  stage.style.setProperty("--dy", `${dy}px`);
+}
+stage.addEventListener("pointerdown", (e) => {
+  down = state !== "air" || (e.target as HTMLElement).closest("button, .sheet, .scrim, .page, .dock, .stories, .fx, .tray") ? undefined : { x: e.clientX, y: e.clientY };
+  if (down) stage.classList.add("dragging");
+  if (trayOpen && !(e.target as HTMLElement).closest(".tray, #left")) {
+    closeTray();
+    render();
+  }
+});
+stage.addEventListener("pointermove", (e) => {
+  if (!down) return;
+  const dx = e.clientX - down.x;
+  const dy = e.clientY - down.y;
+  // тянется по одной оси — той, по которой повели
+  if (Math.abs(dx) > Math.abs(dy)) drag(dx * 0.4, 0);
+  else drag(0, dy * 0.4);
+});
+function release(e: PointerEvent) {
+  if (!down) return;
+  const dx = e.clientX - down.x;
+  const dy = e.clientY - down.y;
+  down = undefined;
+  stage.classList.remove("dragging");
+  drag(0, 0);
+  if (state !== "air" || e.type === "pointercancel") return;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+    flyIn(dx < 0 ? 120 : -120, 0);
+    stepChannel(dx < 0 ? 1 : -1);
+  } else if (Math.abs(dy) > 50) {
+    flyIn(0, dy < 0 ? 140 : -140);
+    void playVoice(voice + (dy < 0 ? 1 : -1));
+  } else if (Math.hypot(dx, dy) < 10) {
+    if (!src) void playVoice(voice);
+    else if (ctx!.state === "running") {
+      void ctx!.suspend();
+      playing = false;
+      render();
+    } else {
+      void ctx!.resume();
+      playing = true;
+      render();
+    }
+  }
+}
+stage.addEventListener("pointerup", release);
+stage.addEventListener("pointercancel", release);
+// с клавиатуры: стрелки листают голоса и каналы, пробел — пауза
+stage.addEventListener("keydown", (e) => {
+  if (state !== "air" || !airFront() || (e.target as HTMLElement).closest("button, .sheet, .page")) return;
+  if (e.key === "ArrowDown") void playVoice(voice + 1);
+  else if (e.key === "ArrowUp") void playVoice(voice - 1);
+  else if (e.key === "ArrowRight") stepChannel(1);
+  else if (e.key === "ArrowLeft") stepChannel(-1);
+});
+
+// =================== кадр ===================
+
+// текущие значения тянутся к целевым — отсюда мягкость: ничего не переключается рывком
+const cur = { s: 0.7, b: 0.85, ring: 0, bg: 0.25, c: [...HOT] as RGB };
+let level = 0; // громкость 0..1, сглаженная
+let bump = 0; // короткий всплеск: сердце
+let last = performance.now();
+
+function loudness(t: number) {
+  if (state === "rec" && noMic) return 0.35 + 0.3 * Math.sin(t / 170) * Math.sin(t / 610);
+  if (!ctx || (!playing && state !== "rec")) return 0;
+  analyser.getFloatTimeDomainData(wave);
+  let sum = 0;
+  for (const x of wave) sum += x * x;
+  return Math.min(1, Math.sqrt(sum / wave.length) * 4.5);
+}
+
+function frame(t: number) {
+  const dt = Math.min(0.05, (t - last) / 1000);
+  last = t;
+
+  const raw = loudness(t) * (calm ? 0.3 : 1);
+  level += (raw - level) * (1 - Math.exp(-dt * (raw > level ? 22 : 6))); // растёт быстро, спадает плавно
+  bump *= Math.exp(-dt * 5);
+
+  // в тишине овал не замирает: медленно дышит
+  const tg = { s: 0.7 + (calm ? 0 : 0.018 * Math.sin(t / 1100)), b: 0.85, ring: 0, bg: 0.25, c: HOT };
+  if (state === "air" && playing) Object.assign(tg, { s: 0.76 + level * 0.28, b: 1, bg: 0.6 + level * 0.3 });
+  if (state === "rec") Object.assign(tg, { s: 0.78 + level * 0.3, b: 1, bg: 0.7 + level * 0.3, c: LIVE });
+  if (state === "review") Object.assign(tg, { s: 0.6 + level * 0.2, b: 1, ring: 1, bg: 0.5, c: LIVE });
+  // запись улетает: лепестки собраны в луч
+  if (state === "sending") Object.assign(tg, { s: 0.6, b: 1, bg: 0.9, c: LIVE });
+  if (state === "sent") Object.assign(tg, { s: 0.5, b: 1, bg: 0.6 });
+
+  const k = 1 - Math.exp(-dt * 7);
+  const slow = 1 - Math.exp(-dt * 3.5);
+  cur.s += (tg.s - cur.s) * (1 - Math.exp(-dt * 12));
+  cur.b += (tg.b - cur.b) * k;
+  cur.bg += (tg.bg - cur.bg) * k;
+  cur.ring += (tg.ring - cur.ring) * slow;
+  for (let i = 0; i < 3; i++) cur.c[i] += (tg.c[i] - cur.c[i]) * slow;
+
+  const st = stage.style;
+  st.setProperty("--lv", level.toFixed(3));
+  st.setProperty("--s", (cur.s + bump * 0.12).toFixed(4));
+  st.setProperty("--b", cur.b.toFixed(3));
+  st.setProperty("--bg", cur.bg.toFixed(3));
+  st.setProperty("--ring", cur.ring.toFixed(3));
+  st.setProperty("--c", `rgb(${cur.c.map(Math.round).join(" ")})`);
+
+  if (state === "rec") {
+    const sec = (t - recStart) / 1000;
+    $("hint").textContent = noMic ? `${fmt(sec)} · микрофон недоступен, это демо` : `${fmt(sec)} / ${fmt(maxRec())}`;
+    if (sec >= maxRec()) stopRec();
+  }
+  requestAnimationFrame(frame);
+}
+
+render();
+requestAnimationFrame(frame);

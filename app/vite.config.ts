@@ -42,6 +42,7 @@ const pwa = VitePWA({
     // + демо-голоса (≈1 МБ) и основные начертания шрифта: эфир играет даже в первый офлайн-запуск
     globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/{inter-tight,jetbrains-mono}-{latin,cyrillic}-*-normal-*.woff2"],
     navigateFallback: `${base}index.html`,
+    navigateFallbackDenylist: [/\/v2\//], // новая версия — своя страница, не старое приложение
     cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
@@ -65,7 +66,13 @@ const pwa = VitePWA({
 });
 
 // `npm run dev:phone` — HTTPS в локальной сети: без него телефон не даст доступ к микрофону
+// Две версии рядом: старая — в корне сайта, новая «капсула» — по адресу /v2/
 export default defineConfig(({ mode }) => ({
   base,
   plugins: [pwa, ...(mode === "phone" ? [basicSsl()] : [])],
+  build: {
+    rollupOptions: {
+      input: { main: "index.html", v2: "v2/index.html" },
+    },
+  },
 }));
