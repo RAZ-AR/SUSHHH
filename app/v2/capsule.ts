@@ -477,15 +477,52 @@ function pass(f: number) {
   passedF = f;
 }
 
-// запись: микрофон → анализатор (в динамики не идёт) и MediaRecorder
+// Запись. Голос снимается прямо из звукового графа (AudioWorklet, где его нет — ScriptProcessor)
+// в память, без файла и расшифровки: Safari не всегда расшифровывает запись собственного
+// MediaRecorder, и она выходила немой.
 let mic: MediaStream | undefined;
 let micNode: MediaStreamAudioSourceNode | undefined;
-let recorder: MediaRecorder | undefined;
-let chunks: Blob[] = [];
-let take: AudioBuffer | undefined; // записанный ответ
-let noMic = false; // нет доступа к микрофону — капсула дышит сама, чтобы прототип можно было посмотреть
+let tap: AudioWorkletNode | ScriptProcessorNode | undefined;
+let sink: GainNode | undefined; // тап подключён к выходу через ноль — иначе браузер его не крутит
+let pcm: Float32Array[] = [];
+let take: AudioBuffer | undefined; // записанный голос
 let recStart = 0;
 let recLen = 0;
+
+const TAP_CODE = `registerProcessor("tap", class extends AudioWorkletProcessor {
+  process(inputs) { const ch = inputs[0] && inputs[0][0]; if (ch) this.port.postMessage(ch.slice(0)); return true; }
+});`;
+let tapReady: Promise<boolean> | undefined;
+function loadTap(c: AudioContext) {
+  tapReady ??= c.audioWorklet
+    ? c.audioWorklet.addModule(URL.createObjectURL(new Blob([TAP_CODE], { type: "text/javascript" }))).then(
+        () => true,
+        () => false,
+      )
+    : Promise.resolve(false);
+  return tapReady;
+}
+
+// iOS: на время записи аудиосессия «запись», потом снова «воспроизведение». Без этого после
+// микрофона звук уходит в разговорный динамик, а Web Audio глушит переключатель «без звука».
+type Session = { type: string };
+const session = (type: "playback" | "play-and-record") => {
+  const s = (navigator as Navigator & { audioSession?: Session }).audioSession;
+  if (s) s.type = type;
+};
+session("playback");
+
+// короткое сообщение под именем автора: что пошло не так и что сделать
+let notice = "";
+let noticeTimer = 0;
+function say(text: string) {
+  notice = text;
+  clearTimeout(noticeTimer);
+  noticeTimer = window.setTimeout(() => {
+    notice = "";
+    render();
+  }, 6000);
+}
 
 // Эффекты для своей записи. Считаются заранее целиком (OfflineAudioContext): то, что слышно
 // при прослушивании, и уходит в эфир.
@@ -564,60 +601,92 @@ async function pickFx(id: Fx) {
 }
 
 async function startRec(t: Target = target) {
+  if (state === "rec") return;
   target = t;
   silence();
   const c = audio();
   take = fxBuf = undefined;
   fx = "none";
-  noMic = false;
+  session("play-and-record");
   try {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-    try {
-      analyser.disconnect();
-    } catch {
-      // ещё не подключён
-    }
-    micNode = c.createMediaStreamSource(mic);
-    micNode.connect(analyser);
-    chunks = [];
-    recorder = new MediaRecorder(mic);
-    recorder.ondataavailable = (e) => chunks.push(e.data);
-    recorder.start();
-  } catch {
-    noMic = true;
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (e) {
+    session("playback");
+    say(
+      (e as Error)?.name === "NotAllowedError"
+        ? "Нет доступа к микрофону — разреши его для этого сайта в настройках браузера"
+        : "Микрофон недоступен на этом устройстве",
+    );
+    render();
+    return;
   }
+  await c.resume().catch(() => {}); // iOS приостанавливает звук, пока включается микрофон
+  try {
+    analyser.disconnect();
+  } catch {
+    // ещё не подключён
+  }
+  micNode = c.createMediaStreamSource(mic);
+  micNode.connect(analyser);
+  pcm = [];
+  sink = c.createGain();
+  sink.gain.value = 0;
+  sink.connect(c.destination);
+  if (await loadTap(c)) {
+    const node = new AudioWorkletNode(c, "tap", { channelCount: 1, channelCountMode: "explicit" });
+    node.port.onmessage = (e) => state === "rec" && pcm.push(e.data as Float32Array);
+    tap = node;
+  } else {
+    const node = c.createScriptProcessor(4096, 1, 1);
+    node.onaudioprocess = (e) => state === "rec" && pcm.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    tap = node;
+  }
+  micNode.connect(tap);
+  tap.connect(sink);
   recStart = performance.now();
   state = "rec";
   render();
 }
 
-function stopRec() {
+// cancel — вышли крестиком: записанное выбрасываем молча
+function stopRec(cancel = false) {
+  if (state !== "rec") return;
   recLen = Math.min(maxRec(), (performance.now() - recStart) / 1000);
-  const rec = recorder;
-  if (rec && rec.state !== "inactive") {
-    rec.onstop = async () => {
-      try {
-        take = await audio().decodeAudioData(await new Blob(chunks, { type: rec.mimeType }).arrayBuffer());
-        render();
-      } catch {
-        // не расшифровалось — прослушать нельзя, отправить можно
-      }
-    };
-    rec.stop();
-  }
   micNode?.disconnect();
+  tap?.disconnect();
+  sink?.disconnect();
+  if (tap instanceof AudioWorkletNode) tap.port.onmessage = null;
   mic?.getTracks().forEach((t) => t.stop());
-  mic = micNode = recorder = undefined;
+  mic = micNode = tap = sink = undefined;
+  session("playback");
+  const chunks = pcm;
+  pcm = [];
+  if (cancel) {
+    state = "air";
+    return;
+  }
+  const c = audio();
+  const total = chunks.reduce((n, a) => n + a.length, 0);
+  let peak = 0;
+  for (const a of chunks) for (let i = 0; i < a.length; i += 8) peak = Math.max(peak, Math.abs(a[i]));
+  if (total < c.sampleRate * 0.3 || peak < 1e-4) {
+    // звука нет: слишком коротко или микрофон отдал тишину
+    state = "air";
+    say(total < c.sampleRate * 0.3 ? "Слишком коротко — удерживай запись подольше" : "Микрофон молчит — проверь, не занят ли он другим приложением");
+    render();
+    return;
+  }
+  const buf = c.createBuffer(1, total, c.sampleRate);
+  const ch = buf.getChannelData(0);
+  let o = 0;
+  for (const a of chunks) {
+    ch.set(a, o);
+    o += a.length;
+  }
+  take = buf;
+  recLen = buf.duration;
   state = "review";
   render();
-  // микрофона нет — подставляем демо-запись, чтобы прослушивание и эффекты можно было посмотреть
-  if (noMic)
-    void load("s7").then((buf) => {
-      if (state !== "review" || take) return;
-      take = buf;
-      recLen = buf.duration;
-      render();
-    });
 }
 
 function send() {
@@ -639,7 +708,7 @@ function send() {
 }
 
 function backToAir() {
-  if (state === "rec") stopRec();
+  if (state === "rec") stopRec(true);
   silence();
   state = "air";
   void playVoice(voice);
@@ -697,7 +766,7 @@ function render() {
     $("left").classList.toggle("on", liked.has(voice));
     $("left").setAttribute("aria-expanded", String(trayOpen));
     setBtn($("right"), ICON.thread + (v.replies.length ? `<b class="badge">${v.replies.length}</b>` : ""), "Ветка ответов");
-    $("hint").textContent = playing ? "" : "коснись — и эфир заиграет";
+    $("hint").textContent = notice || (playing ? "" : "коснись — и эфир заиграет");
   } else if (state === "rec") {
     setBtn(main, ICON.stop, "Остановить запись");
     $("label").textContent = "стоп";
@@ -712,7 +781,7 @@ function render() {
     setBtn($("right"), playing ? ICON.stop : ICON.play, playing ? "Остановить" : "Послушать", !!take);
     $("leftl").textContent = "переписать";
     $("rightl").textContent = !take ? "" : playing ? "стоп" : "послушать";
-    $("hint").textContent = `${fmt(recLen)} · ${noMic ? "демо-запись, микрофон недоступен" : "пока слышно только тебе"}`;
+    $("hint").textContent = `${fmt(recLen)} · пока слышно только тебе`;
   } else {
     setBtn($("left"), "", "", false);
     setBtn($("right"), "", "", false);
@@ -871,7 +940,6 @@ let bump = 0; // короткий всплеск: сердце
 let last = performance.now();
 
 function loudness(t: number) {
-  if (state === "rec" && noMic) return 0.35 + 0.3 * Math.sin(t / 170) * Math.sin(t / 610);
   if (!ctx || (!playing && state !== "rec")) return 0;
   analyser.getFloatTimeDomainData(wave);
   let sum = 0;
@@ -922,13 +990,26 @@ function frame(t: number) {
 
   if (state === "rec") {
     const sec = (t - recStart) / 1000;
-    $("hint").textContent = noMic ? `${fmt(sec)} · микрофон недоступен, это демо` : `${fmt(sec)} / ${fmt(maxRec())}`;
+    $("hint").textContent = `${fmt(sec)} / ${fmt(maxRec())}`;
     if (sec >= maxRec()) stopRec();
   }
   requestAnimationFrame(frame);
 }
 
 render();
+// Service worker у сайта общий со старой версией и обновляется только с её согласия.
+// v2 при загрузке ничего не записывает, поэтому готовое обновление применяем сразу.
+void navigator.serviceWorker?.getRegistration().then((reg) => {
+  if (!reg) return;
+  const apply = (w: ServiceWorker | null) => w?.postMessage({ type: "SKIP_WAITING" });
+  apply(reg.waiting);
+  reg.addEventListener("updatefound", () => {
+    const w = reg.installing;
+    w?.addEventListener("statechange", () => w.state === "installed" && apply(w));
+  });
+  void reg.update().catch(() => {});
+});
+
 // волна первого голоса видна сразу, ещё до первого касания
 void load(VOICES[0].file!).then((b) => {
   if (!voiceBuf && voice === 0) setTrack(b);

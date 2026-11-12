@@ -1,5 +1,5 @@
 import basicSsl from "@vitejs/plugin-basic-ssl";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 const LIGHT = "#E9E9E6";
@@ -43,6 +43,9 @@ const pwa = VitePWA({
     globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/{inter-tight,jetbrains-mono}-{latin,cyrillic}-*-normal-*.woff2"],
     navigateFallback: `${base}index.html`,
     navigateFallbackDenylist: [/\/v2\//], // новая версия — своя страница, не старое приложение
+    // страницу v2 не кэшируем: старое приложение обновляется только с согласия, и v2 застревала бы
+    // в старой версии. Её скрипты с хэшем в имени кэшируются как обычно
+    globIgnores: ["**/node_modules/**/*", "v2/**"],
     cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
@@ -65,11 +68,25 @@ const pwa = VitePWA({
   },
 });
 
+// У v2 свой манифест: «На экран Домой» со страницы /v2/ должен открывать /v2/, а не старое приложение.
+// Плагин PWA вставляет общий манифест во все страницы — на v2 оставляем только свой.
+const v2Manifest: Plugin = {
+  name: "v2-manifest",
+  enforce: "post", // после плагина PWA — он тоже «post», и вставляет ссылку раньше нас
+  transformIndexHtml: {
+    order: "post",
+    handler: (html, ctx) =>
+      ctx.path.includes("/v2/")
+        ? html.replace(/<link rel="manifest" href="([^"]*)"\s*\/?>\s*/g, (tag, href: string) => (href.includes("/v2/") ? tag : ""))
+        : html,
+  },
+};
+
 // `npm run dev:phone` — HTTPS в локальной сети: без него телефон не даст доступ к микрофону
 // Две версии рядом: старая — в корне сайта, новая «капсула» — по адресу /v2/
 export default defineConfig(({ mode }) => ({
   base,
-  plugins: [pwa, ...(mode === "phone" ? [basicSsl()] : [])],
+  plugins: [pwa, v2Manifest, ...(mode === "phone" ? [basicSsl()] : [])],
   build: {
     rollupOptions: {
       input: { main: "index.html", v2: "v2/index.html" },
