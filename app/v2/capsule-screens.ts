@@ -1,7 +1,7 @@
 // Разделы и листы прототипа. Разделы (эфир и «Моё») переключает dock; эфир — главный экран, «Моё» — страница
 // поверх него. Каналы и ветка выезжают снизу листом. Звук и запись остаются в capsule.ts и приходят через api.
 
-import { CHANNELS, ME, MY_POSTS, type Clip, type Post } from "./capsule-data";
+import { CHANNELS, ME, MY_POSTS, POSTS, type Clip, type Post } from "./capsule-data";
 
 export type Tab = "air" | "mine";
 export type Target = { kind: "reply"; post: Post } | { kind: "post" };
@@ -115,9 +115,16 @@ function playFrom(list: Clip[], i: number, scope: Scope) {
 }
 
 // что играть подряд: в ветке — исходный голос и ответы; в «Моём» — тот ряд, в котором нажали
+// мои ответы другим людям — из всех веток
+const myReplies = () =>
+  POSTS.filter((p) => !p.mine).flatMap((p) => p.replies.filter((r) => r.mine).map((r) => ({ r, p })));
+
 function listFor(scope: Scope, id = ""): Clip[] {
   if (scope === "sheet") return sheetView === "thread" ? [post, ...post.replies] : [];
-  return MY_POSTS.some((p) => p.id === id) ? MY_POSTS : MY_POSTS.flatMap((p) => p.replies);
+  if (MY_POSTS.some((p) => p.id === id)) return MY_POSTS;
+  const mineOut = myReplies().map(({ r }) => r);
+  if (mineOut.some((r) => r.id === id)) return mineOut;
+  return MY_POSTS.flatMap((p) => p.replies);
 }
 
 function act(a: string, id: string, scope: Scope) {
@@ -137,7 +144,7 @@ function act(a: string, id: string, scope: Scope) {
       redraw(scope);
     } else {
       const list = listFor(scope, id);
-      if (scope === "page" && list !== MY_POSTS && unheard) {
+      if (scope === "page" && list.some((c) => MY_POSTS.some((p) => p.replies.includes(c))) && unheard) {
         unheard = 0;
         api.refresh();
       }
@@ -200,6 +207,9 @@ function drawPage() {
   const page = el("page");
   if (tab === "mine") {
     const mine = MY_POSTS.flatMap((p) => p.replies.map((r) => ({ r, p })));
+    // новые сверху: у записанных здесь id — «m» и время записи
+    const stamp = (id: string) => (id.startsWith("m") ? Number(id.slice(1)) : 0);
+    const sent = myReplies().sort((a, b) => stamp(b.r.id) - stamp(a.r.id));
     const light = api.theme() === "light";
     page.innerHTML =
       `<div class="me"><span class="dot big"></span><div><b>${ME}</b><span>твой цвет — зелёный</span></div>
@@ -208,7 +218,7 @@ function drawPage() {
       `<h2 class="sec">Мои записи</h2>
        <div class="vrow">
          <button class="tile tall add green" data-act="post" aria-label="Записать новый голос">${I.plus}<b>новая запись</b></button>` +
-      MY_POSTS.map(
+      [...MY_POSTS].reverse().map(
         (p) =>
           `<button class="tile tall green${now === p.id ? " playing" : ""}" data-act="play" data-id="${p.id}" aria-label="${now === p.id ? "Остановить" : "Слушать"}: ${p.hook}">
              <span class="tick">${now === p.id ? I.stop : I.play}</span><span class="clamp">${p.hook}</span>
@@ -219,7 +229,12 @@ function drawPage() {
        <h2 class="sec">Ответы мне</h2>` +
       // ответы — горизонтальные овалы
       newReplies() +
-      (mine.length ? mine.map(({ r, p }) => row(r, `на «${p.hook}»`)).join("") : `<p class="empty">Тебе пока не ответили.<br />Запиши голос — и его услышат.</p>`);
+      (mine.length ? mine.map(({ r, p }) => row(r, `на «${p.hook}»`)).join("") : `<p class="empty">Тебе пока не ответили.<br />Запиши голос — и его услышат.</p>`) +
+      // мои ответы другим: новые сверху
+      `<h2 class="sec">Мои ответы</h2>` +
+      (sent.length
+        ? sent.map(({ r, p }) => row(r, `для ${p.name} · «${p.hook}»`)).join("")
+        : `<p class="empty">Твоих ответов пока нет.<br />Микрофон в эфире — ответ голосу, который звучит.</p>`);
   }
 }
 

@@ -11,7 +11,8 @@ import { createRoot } from "react-dom/client";
 import { LOBE_SPAN, VoiceBeam } from "voice-glow";
 import { audioCtx } from "../src/audio";
 import { MEMES, REACTIONS, playReaction, type Reaction } from "../src/reactions";
-import { MY_POSTS, ME, POSTS, type Clip } from "./capsule-data";
+import { MY_POSTS, ME, POSTS, type Clip, type Post } from "./capsule-data";
+import { loadRecs, saveRec, toBuffer, type Saved } from "./store";
 import { airFront, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -45,9 +46,22 @@ let playing = false;
 let target: Target = { kind: "reply", post: POSTS[0] }; // что записываем: ответ на голос или новый пост
 let channelName = "Для тебя";
 const liked = new Set<number>();
-const heard = new Set<number>(); // что уже слушали — овал в сторис бледнеет
+const heard = new Set<string>(); // что уже слушали — овал в сторис бледнеет
 
 const stage = $("stage");
+
+// iPhone, приложение с экрана «Домой»: там 100dvh короче экрана на высоту статус-бара, и снизу
+// оставалась серая полоса. В этом режиме приложение всегда во весь экран — берём высоту экрана.
+const isIos = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+function fitHeight() {
+  if (!isIos || !standalone) return;
+  const landscape = matchMedia("(orientation: landscape)").matches;
+  const h = landscape ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+  document.documentElement.style.setProperty("--app-h", `${h}px`);
+}
+fitHeight();
+addEventListener("resize", fitHeight);
 
 // =================== свечение (voice-glow) ===================
 
@@ -277,7 +291,8 @@ async function playVoice(i: number, from = 0) {
   }
   render();
   const mine = voice;
-  const buf = await load(VOICES[voice].file!);
+  const v = VOICES[voice];
+  const buf = v.buf ?? (await load(v.file!)); // свой пост играет из записанного
   if (voice !== mine) return;
   if (changed || !wave2.childElementCount) setTrack(buf);
   if (state !== "air" || !airFront()) return;
@@ -285,8 +300,9 @@ async function playVoice(i: number, from = 0) {
   passedF = from;
   playBuffer(buf, () => state === "air" && void playVoice(voice + 1), from * buf.duration);
   render();
-  heard.add(voice);
-  void load(VOICES[(voice + 1) % VOICES.length].file!); // следующий — заранее
+  heard.add(VOICES[voice].id);
+  const next = VOICES[(voice + 1) % VOICES.length];
+  if (next.file) void load(next.file); // следующий — заранее
 }
 
 // =================== дорожка ===================
@@ -307,6 +323,7 @@ const rxColor = (r: string) => RX_COLOR[r] ?? "#ff4678";
 const marks = new Map<string, Mark[]>();
 function marksFor(id: string): Mark[] {
   let list = marks.get(id);
+  if (!list && id.startsWith("m")) marks.set(id, (list = [])); // свою запись ещё никто не слышал
   if (!list) {
     let h = 0;
     for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -689,22 +706,47 @@ function stopRec(cancel = false) {
   render();
 }
 
+// записанное — на своё место: пост — в «Моё» и первым в эфир, ответ — в ветку голоса и в «Моё»
+function place(rec: Saved, buf: AudioBuffer) {
+  if (rec.kind === "post") {
+    if (MY_POSTS.some((p) => p.id === rec.id)) return;
+    const post: Post = { id: rec.id, name: ME, mine: true, buf, hook: rec.title, text: "", replies: [] };
+    MY_POSTS.push(post);
+    VOICES.unshift(post);
+    voice++; // эфир остаётся на том же голосе
+  } else {
+    const to = [...VOICES, ...MY_POSTS].find((p) => p.id === rec.to);
+    if (!to || to.replies.some((r) => r.id === rec.id)) return;
+    to.replies.push({ id: rec.id, name: ME, mine: true, buf, text: rec.title });
+  }
+}
+
+let saved = true; // получилось ли сохранить последнюю запись на устройстве
 function send() {
   silence();
   state = "sending";
   render();
-  setTimeout(() => {
-    // записанное остаётся в прототипе: ответ — в ветке, пост — в «Моём»
-    const id = `m${Date.now()}`;
-    if (target.kind === "reply") target.post.replies.push({ id, name: ME, mine: true, buf: finalTake(), text: `Твой ответ · ${fmt(recLen)}` });
-    else MY_POSTS.push({ id, name: ME, mine: true, buf: finalTake(), hook: `Новая запись · ${fmt(recLen)}`, text: "", replies: [] });
+  const buf = finalTake()!;
+  const rec: Saved = {
+    id: `m${Date.now()}`,
+    kind: target.kind,
+    to: target.kind === "reply" ? target.post.id : undefined,
+    title: target.kind === "reply" ? `Ответ для ${target.post.name} · ${fmt(buf.duration)}` : `Новая запись · ${fmt(buf.duration)}`,
+    at: Date.now(),
+    rate: buf.sampleRate,
+    pcm: buf.getChannelData(0).slice(),
+  };
+  const stored = saveRec(rec);
+  setTimeout(async () => {
+    place(rec, buf);
+    saved = await stored;
     state = "sent";
     render();
     setTimeout(() => {
       state = "air";
       void playVoice(voice + 1);
-    }, 1400);
-  }, 1900);
+    }, 2600);
+  }, 1500);
 }
 
 function backToAir() {
@@ -743,8 +785,8 @@ function render() {
     : `<button class="st me" data-i="new" aria-label="Записать новый голос"><span class="oval">${ICON.plus}<span class="nm">ты</span></span></button>` +
       VOICES.map(
         (p, i) =>
-          `<button class="st${i === voice ? " on" : heard.has(i) ? " heard" : ""}" data-i="${i}" aria-label="Слушать: ${p.name}"${i === voice ? ' aria-current="true"' : ""}>
-             <span class="oval"><span class="nm">${p.name}</span></span></button>`,
+          `<button class="st${p.mine ? " mine" : ""}${i === voice ? " on" : heard.has(p.id) ? " heard" : ""}" data-i="${i}" aria-label="Слушать: ${p.mine ? "твою запись" : p.name}"${i === voice ? ' aria-current="true"' : ""}>
+             <span class="oval"><span class="nm">${p.mine ? "ты" : p.name}</span></span></button>`,
       ).join("");
   if (voiceBuf === undefined) {
     wave1.innerHTML = wave2.innerHTML = "";
@@ -786,7 +828,11 @@ function render() {
     setBtn($("left"), "", "", false);
     setBtn($("right"), "", "", false);
     $("label").textContent = state === "sending" ? "летит…" : "в эфире";
-    $("hint").textContent = state !== "sent" ? "" : target.kind === "post" ? "твой голос в эфире" : `${target.post.name} услышит твой ответ`;
+    $("hint").textContent =
+      state !== "sent"
+        ? ""
+        : (target.kind === "post" ? "Твой голос в эфире. Запись — в «Моё»" : `${target.post.name} услышит ответ. Он в ветке и в «Моё»`) +
+          (saved ? "" : " · на устройстве не сохранилась");
   }
 }
 
@@ -1011,7 +1057,15 @@ void navigator.serviceWorker?.getRegistration().then((reg) => {
 });
 
 // волна первого голоса видна сразу, ещё до первого касания
-void load(VOICES[0].file!).then((b) => {
-  if (!voiceBuf && voice === 0) setTrack(b);
-});
+// свои записи с прошлых раз — обратно в эфир и в «Моё»; потом волна текущего голоса
+void loadRecs()
+  .then((recs) => recs.forEach((r) => place(r, toBuffer(r))))
+  .finally(() => {
+    const v = VOICES[voice];
+    const first = voice;
+    void (v.buf ? Promise.resolve(v.buf) : load(v.file!)).then((b) => {
+      if (!voiceBuf && voice === first) setTrack(b);
+    });
+    render();
+  });
 requestAnimationFrame(frame);

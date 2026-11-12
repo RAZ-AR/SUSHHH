@@ -67,7 +67,10 @@
         color-scheme: light;
       }
       * { box-sizing: border-box; margin: 0; }
-      html, body { height: 100%; overflow: hidden; background: color-mix(in srgb, var(--page), #000 35%); }
+      html, body { height: 100%; overflow: hidden; background: var(--page); }
+      @media (min-width: 500px) {
+        html, body { background: color-mix(in srgb, var(--page), #000 35%); }
+      }
       body {
         display: grid;
         place-items: center;
@@ -87,7 +90,7 @@
         --lv: 0; /* громкость сейчас */
         position: relative;
         width: min(100vw, 430px);
-        height: min(100dvh, 900px);
+        height: var(--app-h, 100dvh); /* с экрана «Домой» на iPhone — высота экрана, см. capsule.ts */
         overflow: hidden;
         background: var(--page);
         touch-action: none;
@@ -95,7 +98,7 @@
         -webkit-user-select: none;
       }
       @media (min-width: 500px) {
-        .stage { border-radius: 44px; box-shadow: 0 0 0 1px var(--frame); }
+        .stage { height: min(100dvh, 900px); border-radius: 44px; box-shadow: 0 0 0 1px var(--frame); }
       }
 
       /* отсвет голоса на экране: поднимается из-под капсулы */
@@ -614,7 +617,7 @@
       .oval svg { flex: none; width: 17px; height: 17px; }
       .st:nth-child(3n) .oval { --dc: rgb(175, 70, 255); }
       .st:nth-child(3n + 1) .oval { --dc: rgb(255, 150, 40); }
-      .st.me .oval { --dc: var(--live); }
+      .st.me .oval, .st.mine .oval { --dc: var(--live); }
       .st.heard { opacity: 0.5; }
       .st.on { color: var(--ink); opacity: 1; }
       .st.on .oval { --g: var(--lv); box-shadow: inset 0 0 0 1.5px var(--edge-on), inset 0 1px 0 var(--shine); }
