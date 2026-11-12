@@ -68,7 +68,7 @@
       }
       * { box-sizing: border-box; margin: 0; }
       html, body { height: 100%; overflow: hidden; background: var(--page); }
-      @media (min-width: 500px) {
+      @media (min-width: 500px) and (display-mode: browser) {
         html, body { background: color-mix(in srgb, var(--page), #000 35%); }
       }
       body {
@@ -97,7 +97,7 @@
         user-select: none;
         -webkit-user-select: none;
       }
-      @media (min-width: 500px) {
+      @media (min-width: 500px) and (display-mode: browser) {
         .stage { height: min(100dvh, 900px); border-radius: 44px; box-shadow: 0 0 0 1px var(--frame); }
       }
 
@@ -511,6 +511,25 @@
       /* вертикальный овал: мои записи, листаются вбок */
       .vrow { display: flex; gap: 10px; margin: 0 -18px; padding: 2px 18px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x pan-y; }
       .vrow::-webkit-scrollbar { display: none; }
+      /* своя запись и кнопка удаления под ней (у ответов — справа) */
+      .item { flex: none; display: flex; align-items: center; gap: 6px; }
+      .item.t { flex-direction: column; }
+      .item.r { margin-top: 8px; }
+      .item.r .row { flex: 1; margin-top: 0; }
+      .del {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        color: var(--ink-2);
+        background: var(--glass);
+        transition: color 0.2s, background 0.2s, scale 0.15s;
+      }
+      .del:hover { color: var(--hot); background: var(--glass-on); }
+      .del:active { scale: 0.9; }
+      .del svg { width: 18px; height: 18px; }
       .tile.tall { flex: none; width: 112px; min-height: 190px; padding: 26px 14px 24px; align-items: center; justify-content: flex-start; gap: 10px; text-align: center; }
       .tile.tall .tick { position: static; translate: none; }
       .tile.tall .count { margin-top: auto; color: var(--ink); }

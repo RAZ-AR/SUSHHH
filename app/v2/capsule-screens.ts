@@ -1,7 +1,7 @@
 // Разделы и листы прототипа. Разделы (эфир и «Моё») переключает dock; эфир — главный экран, «Моё» — страница
 // поверх него. Каналы и ветка выезжают снизу листом. Звук и запись остаются в capsule.ts и приходят через api.
 
-import { CHANNELS, ME, MY_POSTS, POSTS, type Clip, type Post } from "./capsule-data";
+import { CHANNELS, ME, MY_POSTS, POSTS, esc, type Clip, type Post } from "./capsule-data";
 
 export type Tab = "air" | "mine";
 export type Target = { kind: "reply"; post: Post } | { kind: "post" };
@@ -14,6 +14,7 @@ type Api = {
   refresh(): void; // перерисовать эфир и dock
   theme(): "dark" | "light";
   toggleTheme(): void;
+  remove(id: string): Promise<void>; // удалить свою запись
 };
 type Sheet = "channels" | "thread";
 type Scope = "page" | "sheet";
@@ -24,6 +25,7 @@ const I = {
   stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>',
   mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
@@ -156,6 +158,18 @@ function act(a: string, id: string, scope: Scope) {
     api.refresh();
     playFrom(listFor("page"), 0, "page");
   } else if (a === "post") api.record({ kind: "post" });
+  else if (a === "del") {
+    // удаление не отменить — спрашиваем
+    if (!confirm("Удалить запись? Вернуть её не получится.")) return;
+    if (now === id) {
+      api.stop();
+      now = "";
+    }
+    void api.remove(id).then(() => {
+      drawPage();
+      if (sheetView) drawSheet();
+    });
+  }
   else if (a === "reply") {
     const p = post;
     closeSheet(false);
@@ -181,13 +195,21 @@ const plural = (n: number, one: string, few: string, many: string) => {
 };
 const replies = (n: number) => plural(n, "ответ", "ответа", "ответов");
 
-const row = (c: Clip, sub = c.text) =>
-  `<button class="row${c.mine ? " mine" : ""}${now === c.id ? " playing" : ""}" data-act="play" data-id="${c.id}"
-     aria-label="${now === c.id ? "Остановить" : "Слушать"}: ${c.mine ? "ты" : c.name}">
+// записанное на этом телефоне можно удалить — у таких id первая буква «m»
+const deletable = (id: string) => id.startsWith("m");
+const delBtn = (id: string) => `<button class="del" data-act="del" data-id="${id}" aria-label="Удалить запись">${I.trash}</button>`;
+
+// sub — уже готовая разметка (экранированная)
+const row = (c: Clip, sub = esc(c.text)) => {
+  const who = c.mine ? "ты" : esc(c.name);
+  const btn = `<button class="row${c.mine ? " mine" : ""}${now === c.id ? " playing" : ""}" data-act="play" data-id="${c.id}"
+     aria-label="${now === c.id ? "Остановить" : "Слушать"}: ${who}">
      <span class="dot"></span>
-     <span class="txt"><b>${c.mine ? "ты" : c.name}</b><span>${sub}</span></span>
+     <span class="txt"><b>${who}</b><span>${sub}</span></span>
      <span class="ico">${now === c.id ? I.stop : I.play}</span>
    </button>`;
+  return deletable(c.id) ? `<div class="item r">${btn}${delBtn(c.id)}</div>` : btn;
+};
 
 const channelTiles = () =>
   `<div class="tiles">` +
@@ -195,7 +217,7 @@ const channelTiles = () =>
     (c, i) =>
       `<button class="tile ${i % 3 === 0 ? "green" : "pink"}" data-act="channel" data-id="${c.id}" aria-pressed="${c.id === channel}">
          ${c.id === channel ? `<span class="tick">${I.check}</span>` : ""}
-         <b>${c.name}</b><span>${c.note}</span>
+         <b>${esc(c.name)}</b><span>${esc(c.note)}</span>
        </button>`,
   ).join("") +
   `</div>`;
@@ -212,28 +234,28 @@ function drawPage() {
     const sent = myReplies().sort((a, b) => stamp(b.r.id) - stamp(a.r.id));
     const light = api.theme() === "light";
     page.innerHTML =
-      `<div class="me"><span class="dot big"></span><div><b>${ME}</b><span>твой цвет — зелёный</span></div>
+      `<div class="me"><span class="dot big"></span><div><b>${esc(ME)}</b><span>твой цвет — зелёный</span></div>
          <button class="small" data-act="theme" aria-label="${light ? "Тёмная тема" : "Светлая тема"}">${light ? I.moon : I.sun}</button></div>` +
       // мои записи — вертикальные овалы, листаются вбок; первый начинает новую запись
       `<h2 class="sec">Мои записи</h2>
        <div class="vrow">
          <button class="tile tall add green" data-act="post" aria-label="Записать новый голос">${I.plus}<b>новая запись</b></button>` +
-      [...MY_POSTS].reverse().map(
-        (p) =>
-          `<button class="tile tall green${now === p.id ? " playing" : ""}" data-act="play" data-id="${p.id}" aria-label="${now === p.id ? "Остановить" : "Слушать"}: ${p.hook}">
-             <span class="tick">${now === p.id ? I.stop : I.play}</span><span class="clamp">${p.hook}</span>
+      [...MY_POSTS].reverse().map((p) => {
+        const tile = `<button class="tile tall green${now === p.id ? " playing" : ""}" data-act="play" data-id="${p.id}" aria-label="${now === p.id ? "Остановить" : "Слушать"}: ${esc(p.hook)}">
+             <span class="tick">${now === p.id ? I.stop : I.play}</span><span class="clamp">${esc(p.hook)}</span>
              <span class="count">${p.replies.length ? replies(p.replies.length) : ""}</span>
-           </button>`,
-      ).join("") +
+           </button>`;
+        return deletable(p.id) ? `<div class="item t">${tile}${delBtn(p.id)}</div>` : tile;
+      }).join("") +
       `</div>
        <h2 class="sec">Ответы мне</h2>` +
       // ответы — горизонтальные овалы
       newReplies() +
-      (mine.length ? mine.map(({ r, p }) => row(r, `на «${p.hook}»`)).join("") : `<p class="empty">Тебе пока не ответили.<br />Запиши голос — и его услышат.</p>`) +
+      (mine.length ? mine.map(({ r, p }) => row(r, `на «${esc(p.hook)}»`)).join("") : `<p class="empty">Тебе пока не ответили.<br />Запиши голос — и его услышат.</p>`) +
       // мои ответы другим: новые сверху
       `<h2 class="sec">Мои ответы</h2>` +
       (sent.length
-        ? sent.map(({ r, p }) => row(r, `для ${p.name} · «${p.hook}»`)).join("")
+        ? sent.map(({ r, p }) => row(r, `для ${esc(p.name)} · «${esc(p.hook)}»`)).join("")
         : `<p class="empty">Твоих ответов пока нет.<br />Микрофон в эфире — ответ голосу, который звучит.</p>`);
   }
 }
@@ -248,7 +270,7 @@ function drawSheet() {
       `<div class="sh-head"><button class="small" data-act="close" aria-label="Закрыть">${I.close}</button>
          <div><div class="sh-title">Ветка</div>${n ? `<div class="sh-sub">${replies(n)}</div>` : ""}</div><span></span></div>
        <div class="tiles"><button class="tile pink wide${now === post.id ? " playing" : ""}" data-act="play" data-id="${post.id}">
-         <span class="tick">${now === post.id ? I.stop : I.play}</span><b>${post.name}</b><span>${post.hook}</span>
+         <span class="tick">${now === post.id ? I.stop : I.play}</span><b>${post.mine ? "ты" : esc(post.name)}</b><span>${esc(post.hook)}</span>
        </button></div>` +
       (n
         ? `<button class="pill" data-act="all">${I.play} слушать всё подряд</button>` + post.replies.map((r) => row(r)).join("")

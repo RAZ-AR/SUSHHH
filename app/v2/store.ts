@@ -1,15 +1,38 @@
 // Свои записи хранятся на устройстве (IndexedDB): переживают перезагрузку и закрытие приложения.
-// Звук лежит как есть — моно-отсчёты и частота, без кодирования: так его не нужно расшифровывать.
+// Звук лежит моно-отсчётами без кодека — его не нужно расшифровывать. Чтобы не занимать лишнего,
+// голос сохраняется с частотой 24 кГц в 16 битах: около 1,4 МБ на 30 секунд вместо 5–6.
 
-export type Saved = {
+export type Meta = {
   id: string;
   kind: "post" | "reply";
   to?: string; // id голоса, на который ответ
   title: string; // подпись в списке
   at: number; // когда записано
-  rate: number;
-  pcm: Float32Array;
 };
+export type Saved = Meta & {
+  rate: number;
+  pcm: Int16Array | Float32Array; // Float32 — записи, сохранённые до сжатия
+};
+
+const RATE = 24000; // голосу хватает: всё, что выше 12 кГц, речи почти не добавляет
+
+// звук → компактный вид для хранения
+export async function pack(buf: AudioBuffer): Promise<{ rate: number; pcm: Int16Array }> {
+  let ch = buf.getChannelData(0);
+  let rate = buf.sampleRate;
+  if (rate > RATE) {
+    const off = new OfflineAudioContext(1, Math.ceil(buf.duration * RATE), RATE);
+    const src = off.createBufferSource();
+    src.buffer = buf;
+    src.connect(off.destination);
+    src.start();
+    ch = (await off.startRendering()).getChannelData(0);
+    rate = RATE;
+  }
+  const pcm = new Int16Array(ch.length);
+  for (let i = 0; i < ch.length; i++) pcm[i] = Math.max(-1, Math.min(1, ch[i])) * 32767;
+  return { rate, pcm };
+}
 
 const DB = "sushhh-v2";
 const STORE = "recordings";
@@ -40,6 +63,16 @@ export async function saveRec(rec: Saved) {
   });
 }
 
+export async function deleteRec(id: string) {
+  const d = await open();
+  if (!d) return;
+  await new Promise<void>((resolve) => {
+    const tx = d.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
+  });
+}
+
 export async function loadRecs(): Promise<Saved[]> {
   const d = await open();
   if (!d) return [];
@@ -53,6 +86,8 @@ export async function loadRecs(): Promise<Saved[]> {
 // записанное — обратно в звук
 export function toBuffer(rec: Saved) {
   const buf = new AudioBuffer({ length: rec.pcm.length, sampleRate: rec.rate, numberOfChannels: 1 });
-  buf.copyToChannel(rec.pcm as Float32Array<ArrayBuffer>, 0);
+  const ch = buf.getChannelData(0);
+  if (rec.pcm instanceof Int16Array) for (let i = 0; i < ch.length; i++) ch[i] = rec.pcm[i] / 32767;
+  else ch.set(rec.pcm);
   return buf;
 }

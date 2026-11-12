@@ -2,7 +2,7 @@
 // Сияние рисует библиотека voice-glow (libraries.dev/voice). Эфир — полный спектр с розовым в центре,
 // твой голос — зелёный. Записано: капсула сжимается, вокруг расходятся контуры.
 // Отправка: лепестки собираются в один луч, и он ходит из стороны в сторону.
-// Голоса — демо-записи из public/seed; сервера нет, запись живёт до перезагрузки.
+// Голоса — демо-записи из public/seed. Сервера нет: свои записи хранятся только на этом устройстве (store.ts).
 
 import "@fontsource/inter-tight/300.css";
 import "@fontsource/inter-tight/400.css";
@@ -11,8 +11,8 @@ import { createRoot } from "react-dom/client";
 import { LOBE_SPAN, VoiceBeam } from "voice-glow";
 import { audioCtx } from "../src/audio";
 import { MEMES, REACTIONS, playReaction, type Reaction } from "../src/reactions";
-import { MY_POSTS, ME, POSTS, type Clip, type Post } from "./capsule-data";
-import { loadRecs, saveRec, toBuffer, type Saved } from "./store";
+import { MY_POSTS, ME, POSTS, esc, type Clip, type Post } from "./capsule-data";
+import { deleteRec, loadRecs, pack, saveRec, toBuffer, type Meta } from "./store";
 import { airFront, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -43,9 +43,10 @@ type State = "air" | "rec" | "review" | "sending" | "sent";
 let state: State = "air";
 let voice = 0;
 let playing = false;
+let paused = false; // эфир поставлен на паузу касанием — сам не продолжается
 let target: Target = { kind: "reply", post: POSTS[0] }; // что записываем: ответ на голос или новый пост
 let channelName = "Для тебя";
-const liked = new Set<number>();
+const liked = new Set<string>(); // голоса, на которые ты отреагировал, — по id: номер в ряду меняется
 const heard = new Set<string>(); // что уже слушали — овал в сторис бледнеет
 
 const stage = $("stage");
@@ -281,6 +282,7 @@ async function playClip(clip: Clip, onEnd: () => void) {
 }
 
 async function playVoice(i: number, from = 0) {
+  paused = false;
   const changed = (i + VOICES.length) % VOICES.length !== voice || !voiceBuf;
   voice = (i + VOICES.length) % VOICES.length;
   silence();
@@ -303,6 +305,21 @@ async function playVoice(i: number, from = 0) {
   heard.add(VOICES[voice].id);
   const next = VOICES[(voice + 1) % VOICES.length];
   if (next.file) void load(next.file); // следующий — заранее
+}
+
+// пауза: место запоминаем, звук останавливаем; продолжение — с того же места
+function togglePause() {
+  if (playing && playingBuf === voiceBuf) {
+    heldF = trackF();
+    silence();
+    paused = true;
+    render();
+  } else void playVoice(voice, heldF >= 0.999 ? 0 : heldF);
+}
+// эфир уходит с экрана (лист, «Моё», запись): звук стоп, место — запомнить
+function stopAir() {
+  if (playing && playingBuf === voiceBuf) heldF = trackF();
+  silence();
 }
 
 // =================== дорожка ===================
@@ -457,6 +474,11 @@ function stream(r: Reaction, f: number, count: number) {
     }, n * 120);
   }
 }
+
+// Звук реакций идёт через общий движок приложения (src/audio). iPhone запускает звук только
+// по касанию, поэтому будим движок первым же касанием экрана — иначе чужие реакции во время
+// эфира молчали, пока не поставишь свою.
+addEventListener("pointerdown", () => void audioCtx().resume(), { capture: true });
 
 // звук чужих реакций тише голоса, свой — в полную силу
 let quiet: GainNode | undefined;
@@ -617,10 +639,20 @@ async function pickFx(id: Fx) {
   render();
 }
 
+// Пока телефон спрашивает разрешение на микрофон, второе касание не должно открыть второй микрофон
+let starting = false;
 async function startRec(t: Target = target) {
-  if (state === "rec") return;
+  if (state === "rec" || starting) return;
+  starting = true;
+  try {
+    await beginRec(t);
+  } finally {
+    starting = false;
+  }
+}
+async function beginRec(t: Target) {
   target = t;
-  silence();
+  stopAir();
   const c = audio();
   take = fxBuf = undefined;
   fx = "none";
@@ -707,7 +739,7 @@ function stopRec(cancel = false) {
 }
 
 // записанное — на своё место: пост — в «Моё» и первым в эфир, ответ — в ветку голоса и в «Моё»
-function place(rec: Saved, buf: AudioBuffer) {
+function place(rec: Meta, buf: AudioBuffer) {
   if (rec.kind === "post") {
     if (MY_POSTS.some((p) => p.id === rec.id)) return;
     const post: Post = { id: rec.id, name: ME, mine: true, buf, hook: rec.title, text: "", replies: [] };
@@ -727,16 +759,17 @@ function send() {
   state = "sending";
   render();
   const buf = finalTake()!;
-  const rec: Saved = {
+  const rec: Meta = {
     id: `m${Date.now()}`,
     kind: target.kind,
     to: target.kind === "reply" ? target.post.id : undefined,
     title: target.kind === "reply" ? `Ответ для ${target.post.name} · ${fmt(buf.duration)}` : `Новая запись · ${fmt(buf.duration)}`,
     at: Date.now(),
-    rate: buf.sampleRate,
-    pcm: buf.getChannelData(0).slice(),
   };
-  const stored = saveRec(rec);
+  const stored = pack(buf).then(
+    (p) => saveRec({ ...rec, ...p }),
+    () => false,
+  );
   setTimeout(async () => {
     place(rec, buf);
     saved = await stored;
@@ -753,7 +786,43 @@ function backToAir() {
   if (state === "rec") stopRec(true);
   silence();
   state = "air";
-  void playVoice(voice);
+  void playVoice(voice, heldF);
+}
+
+// удалить свою запись: из эфира, «Моё», веток и с устройства
+async function removeRec(id: string) {
+  const pi = VOICES.findIndex((p) => p.id === id);
+  if (pi >= 0) {
+    if (pi === voice) {
+      silence();
+      voiceBuf = undefined;
+      heldF = 0;
+    }
+    VOICES.splice(pi, 1);
+    if (pi < voice) voice--;
+    voice = Math.min(voice, VOICES.length - 1);
+  }
+  const mi = MY_POSTS.findIndex((p) => p.id === id);
+  if (mi >= 0) MY_POSTS.splice(mi, 1);
+  for (const p of [...VOICES, ...MY_POSTS]) {
+    const ri = p.replies.findIndex((r) => r.id === id);
+    if (ri >= 0) p.replies.splice(ri, 1);
+  }
+  marks.delete(id);
+  liked.delete(id);
+  heard.delete(id);
+  await deleteRec(id);
+  render();
+  showWave();
+}
+
+// волна текущего голоса на дорожке, даже пока он не играет
+function showWave() {
+  const v = VOICES[voice];
+  const first = voice;
+  void (v.buf ? Promise.resolve(v.buf) : load(v.file!)).then((b) => {
+    if (!voiceBuf && voice === first) setTrack(b);
+  });
 }
 
 // =================== экран ===================
@@ -766,6 +835,34 @@ function setBtn(el: HTMLElement, icon: string, aria: string, show = true) {
   el.hidden = !show;
 }
 
+// Ряд сторис пересоздаётся, только когда в нём что-то поменялось, и прокручивается к текущему
+// голосу, только когда голос сменился: иначе любая перерисовка отбрасывала ряд, пока его листаешь.
+let storiesKey = "";
+let storiesOn = "";
+function drawStories(hidden: boolean) {
+  const box = $("stories");
+  const key = hidden ? "" : `${voice}|${VOICES.map((p) => p.id + (heard.has(p.id) ? "+" : "")).join(",")}`;
+  if (key === storiesKey) return;
+  storiesKey = key;
+  box.innerHTML = hidden
+    ? ""
+    : `<button class="st me" data-i="new" aria-label="Записать новый голос"><span class="oval">${ICON.plus}<span class="nm">ты</span></span></button>` +
+      VOICES.map((p, i) => {
+        const name = p.mine ? "ты" : esc(p.name);
+        return `<button class="st${p.mine ? " mine" : ""}${i === voice ? " on" : heard.has(p.id) ? " heard" : ""}" data-i="${i}" aria-label="Слушать: ${p.mine ? "твою запись" : name}"${i === voice ? ' aria-current="true"' : ""}>
+             <span class="oval"><span class="nm">${name}</span></span></button>`;
+      }).join("");
+  const id = hidden ? "" : VOICES[voice].id;
+  if (!id || id === storiesOn) return;
+  storiesOn = id;
+  // прокрутка только самого ряда: scrollIntoView двигал бы и экран
+  const on = box.querySelector<HTMLElement>(".on");
+  if (!on) return;
+  const br = box.getBoundingClientRect();
+  const or = on.getBoundingClientRect();
+  box.scrollTo({ left: box.scrollLeft + or.left - br.left - (br.width - or.width) / 2, behavior: calm ? "auto" : "smooth" });
+}
+
 function render() {
   paintBeam();
   paintDock();
@@ -776,23 +873,14 @@ function render() {
   const replying = state !== "air";
   const air = state === "air";
   $("who").textContent = air ? v.name : target.kind === "post" ? "новая запись" : `ответ для ${target.post.name}`;
-  $("chan").innerHTML = `${channelName} ${ICON.down}`;
+  $("chan").innerHTML = `${esc(channelName)} ${ICON.down}`;
   $("chan").hidden = !air;
   $("hook").textContent = replying ? "" : v.hook;
-  // сторис: первый овал — ты (новая запись), дальше голоса эфира; текущий обведён и светится в такт
-  $("stories").innerHTML = replying
-    ? ""
-    : `<button class="st me" data-i="new" aria-label="Записать новый голос"><span class="oval">${ICON.plus}<span class="nm">ты</span></span></button>` +
-      VOICES.map(
-        (p, i) =>
-          `<button class="st${p.mine ? " mine" : ""}${i === voice ? " on" : heard.has(p.id) ? " heard" : ""}" data-i="${i}" aria-label="Слушать: ${p.mine ? "твою запись" : p.name}"${i === voice ? ' aria-current="true"' : ""}>
-             <span class="oval"><span class="nm">${p.mine ? "ты" : p.name}</span></span></button>`,
-      ).join("");
+  drawStories(replying);
   if (voiceBuf === undefined) {
     wave1.innerHTML = wave2.innerHTML = "";
     drawPins();
   }
-  $("stories").querySelector(".on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: calm ? "auto" : "smooth" });
   setBtn($("back"), ICON.close, "Назад в эфир", state === "rec" || state === "review");
   if (state !== "review") $("leftl").textContent = $("rightl").textContent = "";
   // эффекты — только когда запись готова
@@ -805,10 +893,10 @@ function render() {
     setBtn(main, ICON.mic, "Ответить голосом");
     $("label").textContent = "ответить";
     setBtn($("left"), ICON.heart, "Аудио-реакции");
-    $("left").classList.toggle("on", liked.has(voice));
+    $("left").classList.toggle("on", liked.has(v.id));
     $("left").setAttribute("aria-expanded", String(trayOpen));
     setBtn($("right"), ICON.thread + (v.replies.length ? `<b class="badge">${v.replies.length}</b>` : ""), "Ветка ответов");
-    $("hint").textContent = notice || (playing ? "" : "коснись — и эфир заиграет");
+    $("hint").textContent = notice || (playing ? "" : paused ? "пауза — коснись, чтобы продолжить" : "коснись — и эфир заиграет");
   } else if (state === "rec") {
     setBtn(main, ICON.stop, "Остановить запись");
     $("label").textContent = "стоп";
@@ -831,8 +919,9 @@ function render() {
     $("hint").textContent =
       state !== "sent"
         ? ""
-        : (target.kind === "post" ? "Твой голос в эфире. Запись — в «Моё»" : `${target.post.name} услышит ответ. Он в ветке и в «Моё»`) +
-          (saved ? "" : " · на устройстве не сохранилась");
+        : // сервера пока нет: запись остаётся на этом телефоне, другим людям не уходит — так и говорим
+          (target.kind === "post" ? "Сохранено: первой в эфире и в «Моё»" : `Ответ для ${target.post.name} сохранён: в ветке и в «Моё»`) +
+          (saved ? " · другим людям пока не отправляется" : " · на устройстве сохранить не удалось");
   }
 }
 
@@ -886,7 +975,7 @@ tray.onclick = (e) => {
   playReaction(r, rxOut(false));
   stream(r, f, 5);
   drawPins(mark);
-  liked.add(voice);
+  liked.add(VOICES[voice].id);
   bump = 1;
   render();
 };
@@ -899,9 +988,10 @@ $("stories").onclick = (e) => {
 
 initScreens({
   play: (clip, onEnd) => void playClip(clip, onEnd),
-  stop: silence,
+  stop: stopAir,
   record: (t) => void startRec(t),
-  resume: () => state === "air" && void playVoice(voice),
+  resume: () => state === "air" && !paused && void playVoice(voice, heldF),
+  remove: removeRec,
   setChannel: (name) => {
     channelName = name;
     void playVoice(0);
@@ -953,25 +1043,18 @@ function release(e: PointerEvent) {
   } else if (Math.abs(dy) > 50) {
     flyIn(0, dy < 0 ? 140 : -140);
     void playVoice(voice + (dy < 0 ? 1 : -1));
-  } else if (Math.hypot(dx, dy) < 10) {
-    if (!src) void playVoice(voice);
-    else if (ctx!.state === "running") {
-      void ctx!.suspend();
-      playing = false;
-      render();
-    } else {
-      void ctx!.resume();
-      playing = true;
-      render();
-    }
-  }
+  } else if (Math.hypot(dx, dy) < 10) togglePause();
 }
 stage.addEventListener("pointerup", release);
 stage.addEventListener("pointercancel", release);
-// с клавиатуры: стрелки листают голоса и каналы, пробел — пауза
-stage.addEventListener("keydown", (e) => {
-  if (state !== "air" || !airFront() || (e.target as HTMLElement).closest("button, .sheet, .page")) return;
-  if (e.key === "ArrowDown") void playVoice(voice + 1);
+// с клавиатуры: стрелки листают голоса и каналы, пробел — пауза. На кнопках и дорожке клавиши свои
+document.addEventListener("keydown", (e) => {
+  const t = e.target instanceof Element ? e.target : null;
+  if (state !== "air" || !airFront() || t?.closest("button, input, textarea, .track, .sheet, .page")) return;
+  if (e.key === " ") {
+    e.preventDefault();
+    togglePause();
+  } else if (e.key === "ArrowDown") void playVoice(voice + 1);
   else if (e.key === "ArrowUp") void playVoice(voice - 1);
   else if (e.key === "ArrowRight") stepChannel(1);
   else if (e.key === "ArrowLeft") stepChannel(-1);
@@ -1043,29 +1126,16 @@ function frame(t: number) {
 }
 
 render();
-// Service worker у сайта общий со старой версией и обновляется только с её согласия.
-// v2 при загрузке ничего не записывает, поэтому готовое обновление применяем сразу.
-void navigator.serviceWorker?.getRegistration().then((reg) => {
-  if (!reg) return;
-  const apply = (w: ServiceWorker | null) => w?.postMessage({ type: "SKIP_WAITING" });
-  apply(reg.waiting);
-  reg.addEventListener("updatefound", () => {
-    const w = reg.installing;
-    w?.addEventListener("statechange", () => w.state === "installed" && apply(w));
-  });
-  void reg.update().catch(() => {});
-});
+// Service worker у сайта общий со старой версией, и обновляется он только с её согласия, чтобы
+// не оборвать запись. v2 его не торопит: её страница не кэшируется, а скрипты с хэшем в имени
+// и так берутся свежими.
 
 // волна первого голоса видна сразу, ещё до первого касания
 // свои записи с прошлых раз — обратно в эфир и в «Моё»; потом волна текущего голоса
 void loadRecs()
   .then((recs) => recs.forEach((r) => place(r, toBuffer(r))))
   .finally(() => {
-    const v = VOICES[voice];
-    const first = voice;
-    void (v.buf ? Promise.resolve(v.buf) : load(v.file!)).then((b) => {
-      if (!voiceBuf && voice === first) setTrack(b);
-    });
+    showWave();
     render();
   });
 requestAnimationFrame(frame);
