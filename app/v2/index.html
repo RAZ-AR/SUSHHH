@@ -924,6 +924,8 @@
       .page.open { opacity: 1; visibility: visible; transition-delay: 0s; }
       .page > .pill { margin-bottom: 14px; }
       .me > .small { margin-left: auto; }
+      .me > .small + .small { margin-left: 0; }
+      .small[aria-pressed="true"] { --lg-fill: var(--lg-fill-on); color: var(--live); }
 
       /* ===== сторис: ряд горизонтальных стеклянных овалов, листается вбок. Первый — ты, остальные — голоса эфира ===== */
       .stories {
@@ -1031,6 +1033,52 @@
       .dock .main svg { position: relative; z-index: 1; }
       /* идёт запись — на экране только она */
       .stage.busy .dock, .stage.busy .page { display: none; }
+
+      /* ===== чёткий режим: без прозрачности и размытия, граница вместо радужной кромки, текст контрастнее =====
+         Сияние голоса и цвета эмоций остаются — это смысл, а не украшение */
+      :root[data-solid] {
+        --lg-fill: #1c1d21;
+        --lg-fill-on: #2a2b31;
+        --dock: #1c1d21;
+        --card: #1c1d21;
+        --panel: #17181b;
+        --lg-gloss: transparent;
+        --lg-caustic: transparent;
+        --lg-side: transparent;
+        --lg-feather: transparent;
+        --lg-disp-a: transparent;
+        --lg-disp-b: transparent;
+        --lg-disp-c: transparent;
+        --lg-spec: rgba(255, 255, 255, 0.14);
+        --lg-spec-low: transparent;
+        --lg-back: transparent;
+        --lg-rim-op: 0;
+        --edge: rgba(255, 255, 255, 0.4);
+        --edge-on: #fff;
+        --ink-2: rgba(244, 244, 245, 0.88);
+        --cap-alpha: 100%;
+        --side-light: transparent;
+        --side-warm: transparent;
+      }
+      :root[data-solid][data-theme="light"] {
+        --lg-fill: #fff;
+        --lg-fill-on: #eef1f4;
+        --dock: #fff;
+        --card: #fff;
+        --panel: #fff;
+        --lg-spec: transparent;
+        --edge: rgba(0, 0, 0, 0.5);
+        --edge-on: #000;
+        --ink-2: rgba(23, 23, 26, 0.86);
+      }
+      :root[data-solid] :is(*, *::before, *::after) { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+      :root[data-solid] :is(.small, .pill, .fxb, .row, .oval, .del, .dock-bar, .dock .main, .tile, .tray, .main, .rx, .pin, .check, .coach-card):not(:focus-visible) {
+        outline: 1.5px solid var(--edge);
+        outline-offset: -1.5px;
+      }
+      :root[data-solid] .cap { outline: 2px solid var(--edge); outline-offset: -2px; border-radius: 999px; }
+      /* выбранное — толстой контрастной границей, а не радугой */
+      :root[data-solid] :is(.st.on .oval, .tile[aria-pressed="true"], .row.playing, .fxb[aria-pressed="true"]) { --rim-op: 0; outline: 2.5px solid var(--edge-on); outline-offset: -2.5px; }
 
       @media (prefers-reduced-motion: reduce) {
         .small, .main, .pill, .tile, .tile::before, .row, .sheet, .scrim, .page, .dock-tab, .shape, .oval, .st, .tray, .rx, .fxb, .anchor { transition: none; }
