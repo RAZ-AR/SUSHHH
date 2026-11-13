@@ -7,6 +7,7 @@ import { t } from "../src/i18n"; // тексты жалоб и блокиров�
 import { REASONS, blockedNames, type ReportReason } from "./safety";
 import { MIN_AGE, eraseAll, giveConsent } from "./privacy";
 import { ALL_LANGS, chosen } from "./langs";
+import { disablePush, enablePush, pushState, type PushState } from "./push";
 import type { Lang } from "../src/i18n";
 
 export type Tab = "air" | "mine";
@@ -40,6 +41,7 @@ let mod: { id: string; name: string; step: ModStep } | undefined;
 type Scope = "page" | "sheet";
 
 const I = {
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg>',
   contrast: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg>',
@@ -229,6 +231,7 @@ function act(a: string, id: string, scope: Scope) {
     void api.removeAllMine().then(drawPage);
   } else if (a === "erase") openSheet("erase");
   else if (a === "erase-yes") void eraseAll();
+  else if (a === "push") void togglePush();
   else if (a === "lang") {
     api.langs(id as Lang);
     drawSheet();
@@ -333,12 +336,42 @@ const langChips = () => {
   );
 };
 
+// ---------- уведомления ----------
+let pushNow: PushState | "busy" = "off";
+const pushChip = (s: PushState | "busy") =>
+  s === "on" || s === "off" || s === "busy"
+    ? `<button class="pill" data-act="push" aria-pressed="${s === "on"}"${s === "busy" ? " disabled" : ""}>${I.bell} ${tr(s === "on" ? "pushOn" : "pushOff")}</button>`
+    : "";
+const pushNote = (s: PushState | "busy") => (s === "install" ? tr("pushInstall") : s === "denied" ? tr("pushDenied") : s === "unsupported" ? tr("pushUnsupported") : tr("pushNote"));
+function paintPush() {
+  const row = document.getElementById("pushRow");
+  const note = document.getElementById("pushNote");
+  if (row) row.innerHTML = pushChip(pushNow);
+  if (note) note.textContent = pushNote(pushNow);
+}
+export async function refreshPush() {
+  pushNow = await pushState().catch((): PushState => "unsupported");
+  paintPush();
+}
+async function togglePush() {
+  const was = pushNow;
+  pushNow = "busy";
+  paintPush();
+  try {
+    pushNow = was === "on" ? await disablePush() : await enablePush();
+  } catch {
+    pushNow = await pushState().catch((): PushState => "unsupported");
+  }
+  paintPush();
+}
+
 const newReplies = () =>
   unheard ? `<button class="pill hot" data-act="new">${I.play} ${trn("newReplies", unheard)}</button>` : "";
 
 function drawPage() {
   const page = el("page");
   if (tab === "mine") {
+    void refreshPush();
     const mine = MY_POSTS.flatMap((p) => p.replies.map((r) => ({ r, p })));
     // новые сверху: у записанных здесь id — «m» и время записи
     const stamp = (id: string) => (id.startsWith("m") ? Number(id.slice(1)) : 0);
@@ -378,6 +411,8 @@ function drawPage() {
           `</div>`
         : "") +
       // мои данные: правила, удалить свои записи, удалить всё
+      // уведомления об ответах: состояние узнаётся асинхронно — кнопку дорисует refreshPush()
+      `<h2 class="sec">${tr("notifications")}</h2><div class="chips" id="pushRow">${pushChip(pushNow)}</div><p class="hintline" id="pushNote">${pushNote(pushNow)}</p>` +
       `<h2 class="sec">${tr("myData")}</h2><div class="chips">
          <button class="pill" data-act="privacy">${I.shield} ${tr("privacy")}</button>
          ${MY_POSTS.some((p) => deletable(p.id)) || myReplies().some(({ r }) => deletable(r.id)) ? `<button class="pill" data-act="del-mine">${I.trash} ${tr("deleteMine")}</button>` : ""}

@@ -4,7 +4,7 @@
 // Реальное время — только уведомление: при возвращении в приложение эфир догружается целиком,
 // поэтому пропущенное, пока телефон спал, не теряется.
 
-import { audioUrl, connect, countPlay, eraseAccount, fetchFeed, myUid, onNewPost, publish, removePost, sendReaction, sendReport, type RemotePost, type RemoteReaction } from "../src/backend";
+import { audioUrl, connect, countPlay, eraseAccount, fetchFeed, myUid, notifyReply, onNewPost, publish, removePost, sendReaction, sendReport, type RemotePost, type RemoteReaction } from "../src/backend";
 import { encode } from "./encode";
 import { langTag } from "./langs";
 import { pendingReports } from "./safety";
@@ -98,7 +98,9 @@ export const uploading = () => inFlight > 0;
 async function send(meta: Meta, buf: AudioBuffer) {
   inFlight++;
   try {
-    return await upload(meta, buf);
+    const ok = await upload(meta, buf);
+    if (ok && meta.kind === "reply") notifyReply(meta.id); // автору голоса — «Тебе ответили голосом»
+    return ok;
   } finally {
     inFlight--;
   }

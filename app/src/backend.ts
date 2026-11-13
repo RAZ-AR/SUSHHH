@@ -92,6 +92,24 @@ export function countPlay(postId: string) {
   if (sb && uid) void sb.rpc("count_play", { p_id: postId }).then(() => {});
 }
 
+// ---------- уведомления об ответах ----------
+
+// подписка этого устройства: куда слать и на каком языке
+export async function savePush(sub: PushSubscriptionJSON, lang: string) {
+  if (!sb || !uid || !sub.endpoint || !sub.keys) return false;
+  const { error } = await sb
+    .from("push_subscriptions")
+    .upsert({ endpoint: sub.endpoint, user_id: uid, p256dh: sub.keys.p256dh, auth: sub.keys.auth, lang }, { onConflict: "endpoint" });
+  return !error;
+}
+export async function dropPush(endpoint: string) {
+  if (sb && uid) await sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
+}
+// ответ опубликован — попросить сервер уведомить автора голоса (он сам проверит, что ответ наш)
+export function notifyReply(postId: string) {
+  if (sb && uid) void sb.functions.invoke("notify-reply", { body: { post_id: postId } }).catch(() => {});
+}
+
 export function sendReport(postId: string, reason: string) {
   if (sb && uid) void sb.from("reports").upsert({ post_id: postId, user_id: uid, reason }, { onConflict: "post_id,user_id" }).then(() => {});
 }
