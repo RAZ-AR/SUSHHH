@@ -90,7 +90,19 @@ export async function sendNow(meta: Meta, buf: AudioBuffer) {
   return ok;
 }
 
+// идёт отправка — приложение не должно перезагружаться ради обновления, иначе запись из памяти пропадёт
+let inFlight = 0;
+export const uploading = () => inFlight > 0;
+
 async function send(meta: Meta, buf: AudioBuffer) {
+  inFlight++;
+  try {
+    return await upload(meta, buf);
+  } finally {
+    inFlight--;
+  }
+}
+async function upload(meta: Meta, buf: AudioBuffer) {
   const blob = await encode(buf);
   return publish(
     { id: meta.id, blob, replyTo: meta.kind === "reply" ? meta.to : undefined, text: meta.title, env: envOf(buf), palette: 0, tags: [] },
