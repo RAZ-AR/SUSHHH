@@ -73,7 +73,7 @@ export function flush() {
 async function flushOnce() {
   if (!live || !navigator.onLine) return;
   for (const rec of await loadRecs()) {
-    if (rec.sent) continue;
+    if (rec.sent || !rec.publish) continue; // старые записи без отметки — только на телефоне
     const ok = await send(rec, toBuffer(rec)).catch(() => false);
     if (ok) {
       await markSent(rec.id);

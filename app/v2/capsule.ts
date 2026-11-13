@@ -1044,6 +1044,7 @@ function send() {
     id: `m${Date.now()}`,
     kind: target.kind,
     to: target.kind === "reply" ? target.post.id : undefined,
+    publish: true, // в общий эфир — с согласия, данного уже для сервера
     title: target.kind === "reply" ? tr("titleReply", { name: target.post.name, dur: fmt(buf.duration) }) : tr("titleNew", { dur: fmt(buf.duration) }),
     at: Date.now(),
   };
