@@ -91,6 +91,16 @@ export default defineConfig(({ mode }) => ({
   plugins: [pwa, v2Manifest, ...(mode === "phone" ? [basicSsl()] : [])],
   // библиотеки, которые грузятся лениво (сжатие голоса, сервер), собираем заранее: иначе dev-сервер
   // пересобирает их при первом обращении и перезагружает страницу — посреди теста или записи
+  // сияние (voice-glow) написано на React, а нужен ему только рендер и обычные хуки — Preact даёт то же
+  // в ~10 раз меньше: v2 грузится и разбирается быстрее на телефоне
+  resolve: {
+    alias: {
+      "react-dom/client": "preact/compat/client",
+      "react-dom": "preact/compat",
+      "react/jsx-runtime": "preact/jsx-runtime",
+      react: "preact/compat",
+    },
+  },
   optimizeDeps: { include: ["mediabunny", "@mediabunny/aac-encoder", "@supabase/supabase-js"] },
   build: {
     rollupOptions: {

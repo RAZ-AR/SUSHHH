@@ -485,6 +485,8 @@
         transition: opacity 0.2s, scale 0.24s var(--ease), translate 0.24s var(--ease), visibility 0s 0.24s;
       }
       .tray.open { opacity: 1; scale: 1; translate: 0; visibility: visible; transition-delay: 0s; }
+      /* панель закрыта — её 36 анимаций (вращение кромки, блик, покачивание) стоят: незаметно, но каждая стоила кадр */
+      .tray:not(.open) :is(.rx, .rx::before, .rx::after, .rx .e) { animation-play-state: paused; }
       /* эмодзи — стеклянные овалы: свет своего цвета со дна, переливающаяся кромка, объём от тени */
       .rx {
         position: relative;

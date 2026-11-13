@@ -112,13 +112,18 @@ const GLOW = {
 };
 const beamRoot = createRoot($("cap"));
 let beamKey = "";
+// В покое (эфир на паузе, ничего не записывается) сияние замирает на последнем кадре: оно рисуется
+// на видеокарте каждый кадр и в покое тратило бы батарею впустую. Заиграл голос — оживает
+const glowIdle = () => state === "air" && !playing;
 function paintBeam() {
   const key = state === "air" ? "pink" : "green";
-  if (key + theme === beamKey) return;
-  beamKey = key + theme;
+  const idle = glowIdle();
+  if (`${key}${theme}${idle}` === beamKey) return;
+  beamKey = `${key}${theme}${idle}`;
   beamRoot.render(
     createElement(VoiceBeam, {
         type: "mobile",
+        paused: idle,
         theme: "dark",
         ...glowLook(),
         colors: GLOW[key],
@@ -164,8 +169,13 @@ function dockMotion() {
   const px = (dockAt * (beam?.offsetWidth ?? 0)) / 2;
   return { gather: 1, offset: px / widen / ((LOBE_SPAN * DOCK_SCALE) / 2), stretch: Math.min(1, Math.abs(want - dockAt) * 2), heldLevel: 0.34 + level * 0.66 };
 }
+let dockKey = "";
 function paintDock() {
   const tab = getTab();
+  // док перерисовывается, только когда что-то в нём поменялось — а не при каждой перерисовке экрана
+  const key = `${tab}|${inboxCount()}|${theme}|${glowIdle()}`;
+  if (key === dockKey) return;
+  dockKey = key;
   const mic = tr(tab === "air" ? "replyVoice" : "recordNew");
   dockRoot.render(
     createElement(
@@ -201,6 +211,7 @@ function paintDock() {
       createElement(VoiceBeam, {
         className: "mic-beam",
         type: "pill",
+        paused: glowIdle(),
         theme: "dark",
         ...glowLook(),
         colors: GLOW.green,
@@ -1712,6 +1723,14 @@ function loudness() {
   return Math.min(1, Math.sqrt(sum / wave.length) * 4.5);
 }
 
+const written = new Map<string, string>();
+let lastWrite = 0;
+function put(name: string, value: string) {
+  if (written.get(name) === value) return;
+  written.set(name, value);
+  stage.style.setProperty(name, value);
+}
+
 function frame(t: number) {
   const dt = Math.min(0.05, (t - last) / 1000);
   last = t;
@@ -1739,7 +1758,6 @@ function frame(t: number) {
   cur.ring += (tg.ring - cur.ring) * slow;
   for (let i = 0; i < 3; i++) cur.c[i] += (tg.c[i] - cur.c[i]) * slow;
 
-  const st = stage.style;
   if (state === "air") {
     const f = trackF();
     moveTape(f, cur.s);
@@ -1748,13 +1766,19 @@ function frame(t: number) {
     track.setAttribute("aria-valuenow", String(Math.round(f * 100)));
     if (scrubF === undefined) pass(f);
   }
-  // реакция-сердце — вспышка света, а не толчок овала
-  st.setProperty("--lv", Math.min(1, level + bump * 0.6).toFixed(3));
-  st.setProperty("--s", cur.s.toFixed(4));
-  st.setProperty("--b", cur.b.toFixed(3));
-  st.setProperty("--bg", cur.bg.toFixed(3));
-  st.setProperty("--ring", cur.ring.toFixed(3));
-  st.setProperty("--c", `rgb(${cur.c.map(Math.round).join(" ")})`);
+  // Переменные на экране меняют стиль всего дерева — пишем только то, что изменилось, а в покое
+  // (ничего не звучит, не записывается, палец не ведёт) — не чаще 12 раз в секунду: дыхание медленное
+  const calmNow = state === "air" && !playing && !bump && !down;
+  if (!calmNow || t - lastWrite > 83) {
+    lastWrite = t;
+    // реакция-сердце — вспышка света, а не толчок овала
+    put("--lv", Math.min(1, level + bump * 0.6).toFixed(3));
+    put("--s", cur.s.toFixed(3));
+    put("--b", cur.b.toFixed(2));
+    put("--bg", cur.bg.toFixed(2));
+    put("--ring", cur.ring.toFixed(2));
+    put("--c", `rgb(${cur.c.map(Math.round).join(" ")})`);
+  }
 
   if (state === "rec") {
     const sec = (t - recStart) / 1000;
