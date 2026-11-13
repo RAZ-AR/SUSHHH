@@ -89,6 +89,9 @@ const v2Manifest: Plugin = {
 export default defineConfig(({ mode }) => ({
   base,
   plugins: [pwa, v2Manifest, ...(mode === "phone" ? [basicSsl()] : [])],
+  // библиотеки, которые грузятся лениво (сжатие голоса, сервер), собираем заранее: иначе dev-сервер
+  // пересобирает их при первом обращении и перезагружает страницу — посреди теста или записи
+  optimizeDeps: { include: ["mediabunny", "@mediabunny/aac-encoder", "@supabase/supabase-js"] },
   build: {
     rollupOptions: {
       input: { main: "index.html", v2: "v2/index.html" },

@@ -249,6 +249,9 @@ function onCtxState() {
   if (state === "rec") {
     stopRec();
     say(tr("recInterrupted"));
+  } else if (elOn) {
+    // голос играет через <audio> — Web Audio ему не нужен; iPhone усыпляет движок в фоне, а голос
+    // при этом должен звучать дальше. Прерывания <audio> ловит его собственное событие pause
   } else if (state === "air" && playing && playingBuf === voiceBuf) {
     heldF = trackF();
     silence();
@@ -333,6 +336,51 @@ function clipBuf(c: Clip): Promise<AudioBuffer> {
 }
 const hasAudio = (c: Clip) => !!(c.buf || c.stored || c.file || c.url);
 
+// Голоса эфира и записи в листах играют через обычный <audio>, а не через Web Audio: iPhone не глушит
+// его при блокировке экрана и в фоне, им управляют с экрана блокировки и наушников, и он начинает
+// играть, пока файл ещё качается. Web Audio остаётся для записи, эффектов и короткого звука реакций.
+// Свечение при этом движется по огибающей голоса — её считаем из расшифрованного звука для ленты.
+const el = new Audio();
+el.preload = "auto";
+el.setAttribute("playsinline", "");
+let elOn = false; // сейчас звучит <audio>
+// длительность звучащего голоса: у WebM из MediaRecorder в файле её нет (el.duration = Infinity) —
+// тогда берём из расшифрованного звука
+const elDur = () => (isFinite(el.duration) && el.duration > 0 ? el.duration : (playingBuf?.duration ?? 0));
+let ourPause = false; // паузу поставили мы, а не система (звонок, Siri, другое приложение)
+
+// своя запись на телефоне — в WAV, чтобы её можно было отдать <audio>
+const wavs = new WeakMap<AudioBuffer, string>();
+function wavUrl(buf: AudioBuffer) {
+  let url = wavs.get(buf);
+  if (url) return url;
+  const ch = buf.getChannelData(0);
+  const data = new DataView(new ArrayBuffer(44 + ch.length * 2));
+  const str = (o: number, t: string) => [...t].forEach((c, i) => data.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF");
+  data.setUint32(4, 36 + ch.length * 2, true);
+  str(8, "WAVEfmt ");
+  data.setUint32(16, 16, true);
+  data.setUint16(20, 1, true);
+  data.setUint16(22, 1, true);
+  data.setUint32(24, buf.sampleRate, true);
+  data.setUint32(28, buf.sampleRate * 2, true);
+  data.setUint16(32, 2, true);
+  data.setUint16(34, 16, true);
+  str(36, "data");
+  data.setUint32(40, ch.length * 2, true);
+  for (let i = 0; i < ch.length; i++) data.setInt16(44 + i * 2, Math.max(-1, Math.min(1, ch[i])) * 32767, true);
+  url = URL.createObjectURL(new Blob([data.buffer], { type: "audio/wav" }));
+  wavs.set(buf, url);
+  return url;
+}
+// откуда играть: файл в эфире или демо — сразу по адресу; своя запись — из памяти
+async function sourceOf(c: Clip): Promise<string> {
+  if (c.url) return c.url;
+  if (c.file) return `${import.meta.env.BASE_URL}seed/${c.file}.m4a`;
+  return wavUrl(await clipBuf(c));
+}
+
 let src: AudioBufferSourceNode | undefined;
 function silence() {
   if (src) {
@@ -341,9 +389,61 @@ function silence() {
     src.disconnect();
     src = undefined;
   }
+  if (elOn) {
+    ourPause = true;
+    el.onended = el.onerror = null;
+    el.pause();
+    ourPause = false;
+    elOn = false;
+  }
   playing = false;
   ticket++;
 }
+
+// играть через <audio> с места from (0..1); buf — тот же голос расшифрованным, если уже есть
+function playEl(url: string, buf: AudioBuffer | undefined, onEnd: () => void, onFail: () => void, from = 0) {
+  silence();
+  const my = ticket;
+  if (el.src !== new URL(url, location.href).href || el.error) el.src = url;
+  const seek = () => {
+    if (from > 0 && elDur()) el.currentTime = from * elDur();
+  };
+  if (el.readyState >= 1) seek();
+  else el.addEventListener("loadedmetadata", seek, { once: true });
+  el.onended = () => {
+    elOn = false;
+    playing = false;
+    onEnd();
+  };
+  el.onerror = () => {
+    if (my !== ticket) return;
+    elOn = false;
+    playing = false;
+    onFail();
+  };
+  playingBuf = buf;
+  elOn = true;
+  playing = true;
+  void el.play().catch((e: Error) => {
+    if (my !== ticket || e.name === "AbortError") return;
+    elOn = false;
+    playing = false;
+    onFail();
+  });
+}
+
+// система остановила звук (звонок, Siri, наушники вынули) — честная пауза, касание продолжит
+el.addEventListener("pause", () => {
+  if (ourPause || !elOn || el.ended) return;
+  elOn = false;
+  playing = false;
+  if (state === "air" && playingBuf === voiceBuf) {
+    heldF = elDur() ? el.currentTime / elDur() : heldF;
+    paused = true;
+    say(tr("soundInterrupted"));
+  } else clearPlaying();
+  render();
+});
 let playingBuf: AudioBuffer | undefined; // что сейчас звучит
 let startedAt = 0; // время контекста, соответствующее началу записи
 function playBuffer(buf: AudioBuffer, onEnd: () => void, offset = 0) {
@@ -370,14 +470,53 @@ async function playClip(clip: Clip, onEnd: () => void, onFail: () => void) {
   silence();
   const my = ++ticket;
   if (!hasAudio(clip)) return void setTimeout(() => my === ticket && onEnd(), 900); // записано без микрофона — звука нет
-  try {
-    const buf = await clipBuf(clip);
-    if (my === ticket) playBuffer(buf, onEnd);
-  } catch {
-    if (my !== ticket) return;
+  const fail = () => {
     say(tr("clipFailed"));
     onFail();
+  };
+  try {
+    const url = await sourceOf(clip);
+    if (my === ticket) playEl(url, clip.buf, onEnd, fail);
+  } catch {
+    if (my === ticket) fail();
   }
+}
+
+// экран блокировки, наушники, часы: что играет и кнопки «пауза», «следующий», «предыдущий»
+const ms = navigator.mediaSession;
+function nowPlaying(v: Post) {
+  if (!ms || typeof MediaMetadata === "undefined") return;
+  ms.metadata = new MediaMetadata({
+    title: v.hook,
+    artist: v.mine ? tr("you") : v.name,
+    album: "SUSHHH",
+    artwork: [{ src: `${import.meta.env.BASE_URL}pwa-512x512.png`, sizes: "512x512", type: "image/png" }],
+  });
+}
+if (ms) {
+  const on = (a: MediaSessionAction, h: MediaSessionActionHandler) => {
+    try {
+      ms.setActionHandler(a, h);
+    } catch {
+      // действие не поддерживается этим браузером
+    }
+  };
+  on("play", () => state === "air" && !playing && togglePause());
+  on("pause", () => state === "air" && playing && togglePause());
+  on("nexttrack", () => state === "air" && void playVoice(voice + 1));
+  on("previoustrack", () => state === "air" && void playVoice(voice - 1));
+  on("seekto", (d) => d.seekTime != null && elDur() > 0 && seek(d.seekTime / elDur()));
+  el.addEventListener("play", () => (ms.playbackState = "playing"));
+  el.addEventListener("pause", () => (ms.playbackState = "paused"));
+  el.addEventListener("timeupdate", () => {
+    const d = elDur();
+    if (!ms.setPositionState || !d) return;
+    try {
+      ms.setPositionState({ duration: d, position: Math.min(el.currentTime, d), playbackRate: 1 });
+    } catch {
+      // граница записи — пропускаем
+    }
+  });
 }
 
 async function playVoice(i: number, from = 0) {
@@ -394,26 +533,37 @@ async function playVoice(i: number, from = 0) {
   const mine = voice;
   const my = ticket;
   const v = VOICES[voice];
-  let buf: AudioBuffer;
-  try {
-    buf = await clipBuf(v); // свой пост играет из записанного
-  } catch {
-    // не загрузилось: пауза с подсказкой, касание пробует снова. Дальше не листаем —
-    // без сети следующие голоса не загрузились бы так же
-    if (voice !== mine || my !== ticket) return;
+  // не загрузилось: пауза с подсказкой, касание пробует снова. Дальше не листаем —
+  // без сети следующие голоса не загрузились бы так же
+  const failed = () => {
+    if (voice !== mine) return;
     paused = true;
     say(tr("voiceFailed"));
     render();
+  };
+  // лента рисуется по расшифрованному звуку; играет же <audio> сразу, не дожидаясь расшифровки
+  const decoded = clipBuf(v).then(
+    (buf) => {
+      // тот же голос мог выпасть из памяти и расшифроваться заново — лента должна знать новый буфер
+      if (voice === mine && (changed || buf !== voiceBuf || !tape)) setTrack(buf);
+      if (elOn && voice === mine && !playingBuf) playingBuf = buf;
+      return buf;
+    },
+    () => undefined,
+  );
+  let url: string;
+  try {
+    url = await sourceOf(v); // своя запись — из записанного на телефоне
+  } catch {
+    if (my === ticket) failed();
     return;
   }
-  if (voice !== mine) return; // пока грузилось, переключили голос
-  // тот же голос мог выпасть из памяти и расшифроваться заново — дорожка должна знать новый буфер
-  if (changed || buf !== voiceBuf || !tape) setTrack(buf);
-  if (my !== ticket) return; // пока грузилось, включили другое (лист, запись)
+  if (voice !== mine || my !== ticket) return; // пока готовились, переключили голос или включили другое
   if (state !== "air" || !airFront()) return;
-  if (ctx!.state === "suspended") void ctx!.resume();
   passedF = from;
-  playBuffer(buf, () => state === "air" && void playVoice(voice + 1), from * buf.duration);
+  playEl(url, voiceBuf, () => state === "air" && void playVoice(voice + 1), failed, from);
+  void decoded;
+  nowPlaying(v);
   render();
   // прослушивание засчитывается на сервере один раз за запуск (и одно на человека — это решает сервер)
   if (v.remote && !heard.has(v.id)) remote.played(v.id);
@@ -619,6 +769,7 @@ function moveTape(f: number, s: number) {
 // где сейчас звучит, 0..1
 function trackF() {
   if (scrubF !== undefined) return scrubF;
+  if (elOn && playingBuf === voiceBuf && elDur()) return Math.min(1, el.currentTime / elDur());
   if (src && playingBuf && playingBuf === voiceBuf && ctx) return Math.min(1, Math.max(0, (ctx.currentTime - startedAt) / playingBuf.duration));
   return heldF;
 }
@@ -1542,6 +1693,13 @@ let bump = 0; // короткий всплеск: сердце
 let last = performance.now();
 
 function loudness() {
+  // голос из <audio>: громкость — по огибающей в текущем месте записи
+  if (elOn && playingBuf && elDur()) {
+    const env = envelope(playingBuf, Math.max(24, Math.round(playingBuf.duration * 25)));
+    const v = env[Math.min(env.length - 1, Math.floor((el.currentTime / elDur()) * env.length))] ?? 0;
+    return Math.max(0, (v - 0.1) / 0.9) * 0.85;
+  }
+  if (elOn) return 0.35; // огибающей ещё нет — ровное спокойное свечение
   if (!ctx || (!playing && state !== "rec")) return 0;
   analyser.getFloatTimeDomainData(wave);
   let sum = 0;

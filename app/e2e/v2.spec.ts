@@ -132,8 +132,8 @@ test("«Удалить все мои данные» стирает записи,
 
   await page.locator(".dock-tab").nth(1).click();
   await page.locator('[data-act="erase"]').click();
-  await page.locator('[data-act="erase-yes"]').click();
-  await page.waitForLoadState();
+  // после удаления приложение начинается заново — ждём именно новую загрузку страницы
+  await Promise.all([page.waitForEvent("load"), page.locator('[data-act="erase-yes"]').click()]);
   await expect(page.locator("#hint")).toHaveText("коснись — и эфир заиграет");
 
   const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sushhh.v2.") && k !== "sushhh.v2.consent"));
