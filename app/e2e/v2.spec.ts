@@ -8,7 +8,9 @@ const open = async (page: Page) => {
 // согласие на запись уже дано — кроме тестов, которые проверяют сам лист согласия
 const CONSENT = "sushhh.v2.consent";
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((k) => localStorage.setItem(k, JSON.stringify({ v: 1, at: 0 })), CONSENT);
+  await page.addInitScript((k) => localStorage.setItem(k, JSON.stringify({ v: 2, at: 0 })), CONSENT);
+  // настоящий сервер тесты не трогают: без него v2 работает на устройстве, записи ждут в очереди
+  await page.route(/supabase\.co/, (r) => r.abort("internetdisconnected"));
 });
 const noConsent = (page: Page) => page.addInitScript((k) => localStorage.removeItem(k), CONSENT);
 
@@ -35,7 +37,7 @@ test("запись: записать → опубликовать → после
 
   await page.locator("#main").click();
   await expect(page.locator("#hint")).toContainText("Сохранено", { timeout: 5000 });
-  await expect(page.locator("#hint")).toContainText("другим людям пока не отправляется");
+  await expect(page.locator("#hint")).toContainText("уйдёт в эфир, когда появится связь");
 
   await page.reload();
   await expect(mine).toHaveCount(before + 1);
@@ -111,7 +113,7 @@ test("первая запись: сначала согласие и возрас
   await yes.click();
   await expect(page.locator("#main")).toHaveAttribute("aria-label", "Остановить запись");
   // согласие запомнено с версией правил — в следующий раз запись начнётся сразу
-  expect(JSON.parse((await page.evaluate((k) => localStorage.getItem(k), CONSENT))!)).toMatchObject({ v: 1 });
+  expect(JSON.parse((await page.evaluate((k) => localStorage.getItem(k), CONSENT))!)).toMatchObject({ v: 2 });
   await page.locator("#back").click();
   await page.locator("#stories .st.me").click();
   await expect(page.locator("#sheet")).not.toHaveClass(/open/); // лист согласия не открылся
