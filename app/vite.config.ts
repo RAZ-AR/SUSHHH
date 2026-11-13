@@ -49,6 +49,8 @@ const pwa = VitePWA({
     // не качаем его при установке приложения
     globIgnores: ["**/node_modules/**/*", "v2/**", "assets/mediabunny*"],
     cleanupOutdatedCaches: true,
+    // уведомления «Тебе ответили голосом»: показ и касание (public/push-sw.js)
+    importScripts: ["push-sw.js"],
     runtimeCaching: [
       {
         urlPattern: ({ url, request }) => request.destination === "audio" || /\.(m4a|mp3|ogg|opus|webm|aac)$/.test(url.pathname),

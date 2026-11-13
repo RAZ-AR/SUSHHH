@@ -1635,6 +1635,19 @@ function mergeRemote(d: remote.Incoming) {
   applySafety();
   if (!voiceBuf) showWave();
   drawPins();
+  openPendingThread();
+}
+
+// касание уведомления «Тебе ответили голосом» открывает v2 с ?thread=<id> — показываем ветку,
+// как только этот голос пришёл с сервера
+let pendingThread = new URLSearchParams(location.search).get("thread");
+if (pendingThread) history.replaceState(null, "", location.pathname);
+function openPendingThread() {
+  if (!pendingThread) return;
+  const post = [...VOICES, ...ASIDE, ...MY_POSTS].find((p) => p.id === pendingThread);
+  if (!post) return;
+  pendingThread = null;
+  openSheet("thread", post);
 }
 
 initScreens({
