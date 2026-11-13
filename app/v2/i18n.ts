@@ -140,6 +140,8 @@ const D: Record<string, Row> = {
   playVoice: ["Play", "Слушать", "Abspielen", "Reproducir", "Écouter"],
   pauseVoice: ["Pause", "Пауза", "Pause", "Pausa", "Pause"],
   solidMode: ["Clear mode: no transparency, higher contrast", "Чёткий режим: без прозрачности, выше контраст", "Klarer Modus: ohne Transparenz, mehr Kontrast", "Modo nítido: sin transparencias, más contraste", "Mode net : sans transparence, contraste renforcé"],
+  voiceLangs: ["Voice languages", "Языки голосов", "Sprachen der Stimmen", "Idiomas de las voces", "Langues des voix"],
+  voiceLangsNote: ["Voices in other languages stay off your air. Voices without a language mark are always heard.", "Голоса на других языках не попадут в эфир. Голоса без отметки языка слышны всегда.", "Stimmen in anderen Sprachen kommen nicht in dein Live. Stimmen ohne Sprachangabe hörst du immer.", "Las voces en otros idiomas no saldrán en tu directo. Las voces sin idioma marcado se oyen siempre.", "Les voix dans d'autres langues restent hors de ton direct. Les voix sans langue indiquée sont toujours entendues."],
   // каналы
   ch_foryou: ["For you", "Для тебя", "Für dich", "Para ti", "Pour toi"],
   ch_foryou_note: ["picked from what you listen to", "подобрано по тому, что ты слушаешь", "passend zu dem, was du hörst", "elegido según lo que escuchas", "choisi d'après ce que tu écoutes"],

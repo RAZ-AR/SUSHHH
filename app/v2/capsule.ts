@@ -18,6 +18,7 @@ import { t as t1 } from "../src/i18n";
 import { block, report, unblock, hide, visible } from "./safety";
 import { hasConsent } from "./privacy";
 import * as remote from "./remote";
+import { audible, langOf, toggle as toggleLang } from "./langs";
 import { keepFresh } from "./fresh";
 import { airFront, clearPlaying, openConsent, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
@@ -1535,14 +1536,14 @@ function applySafety() {
   const wasPlaying = playing && playingBuf === voiceBuf;
   for (let i = VOICES.length - 1; i >= 0; i--) {
     // последний голос не убираем: пустой эфир сломал бы экран; он уйдёт, когда появятся другие
-    if (visible(VOICES[i]) || VOICES.length === 1) continue;
+    if (shown(VOICES[i]) || VOICES.length === 1) continue;
     removed.push({ clip: VOICES[i] });
     ASIDE.push(VOICES.splice(i, 1)[0]);
     if (i < voice) voice--;
   }
   for (const p of [...VOICES, ...MY_POSTS])
     for (let j = p.replies.length - 1; j >= 0; j--)
-      if (!visible(p.replies[j])) removed.push({ clip: p.replies.splice(j, 1)[0], parent: p });
+      if (!shown(p.replies[j])) removed.push({ clip: p.replies.splice(j, 1)[0], parent: p });
   voice = Math.max(0, Math.min(voice, VOICES.length - 1));
   storiesKey = "";
   if (VOICES[voice] !== was) {
@@ -1555,10 +1556,13 @@ function applySafety() {
   }
   render();
 }
-function restoreAuthor(name: string) {
+// в эфире: не скрыт, автор не в блоке, язык голоса выбран (или не отмечен); свои — всегда
+const shown = (c: Clip) => visible(c) && (c.mine || audible(c.lang));
+// вернуть то, что снова можно слышать: разблокировали автора или включили язык
+function restoreShown() {
   for (let i = removed.length - 1; i >= 0; i--) {
     const { clip, parent } = removed[i];
-    if (clip.name !== name || !visible(clip)) continue;
+    if (!shown(clip)) continue;
     if (parent) parent.replies.push(clip);
     else {
       VOICES.push(clip as Post);
@@ -1602,7 +1606,7 @@ function mergeRemote(d: remote.Incoming) {
       continue;
     }
     const mine = r.author_id === me;
-    const clip: Clip = { id: r.id, name: mine ? ME : r.author_name, text: r.text ?? "", url: remote.urlOf(r.audio_path), remote: true, mine };
+    const clip: Clip = { id: r.id, name: mine ? ME : r.author_name, text: r.text ?? "", url: remote.urlOf(r.audio_path), remote: true, mine, lang: langOf(r.tags) };
     if (!r.reply_to) {
       const post: Post = { ...clip, hook: hookOf(r.text), replies: [], plays: r.plays };
       fresh.push(post);
@@ -1657,9 +1661,14 @@ initScreens({
     for (const id of new Set(mine)) await removeRec(id);
     say(tr("deletedMine"));
   },
+  langs: (l) => {
+    toggleLang(l);
+    applySafety(); // выключили язык — его голоса уходят
+    restoreShown(); // включили — возвращаются
+  },
   unblock: (name) => {
     unblock(name);
-    restoreAuthor(name);
+    restoreShown();
     say(t1("unblocked", { name }));
   },
   play: (clip, onEnd, onFail) => void playClip(clip, onEnd, onFail),

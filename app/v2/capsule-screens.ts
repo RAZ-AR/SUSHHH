@@ -6,6 +6,8 @@ import { tr, trn } from "./i18n";
 import { t } from "../src/i18n"; // тексты жалоб и блокировки — общие со старой версией, уже на 5 языках
 import { REASONS, blockedNames, type ReportReason } from "./safety";
 import { MIN_AGE, eraseAll, giveConsent } from "./privacy";
+import { ALL_LANGS, chosen } from "./langs";
+import type { Lang } from "../src/i18n";
 
 export type Tab = "air" | "mine";
 export type Target = { kind: "reply"; post: Post } | { kind: "post" };
@@ -20,6 +22,7 @@ type Api = {
   toggleTheme(): void;
   solid(): boolean; // чёткий режим: без прозрачности, выше контраст
   toggleSolid(): void;
+  langs(l: Lang): void; // включить или выключить язык голосов
   remove(id: string): Promise<void>; // удалить свою запись
   // безопасность: голос пропадает из эфира у этого человека сразу
   hide(id: string): void;
@@ -226,7 +229,10 @@ function act(a: string, id: string, scope: Scope) {
     void api.removeAllMine().then(drawPage);
   } else if (a === "erase") openSheet("erase");
   else if (a === "erase-yes") void eraseAll();
-  else if (a === "solid") {
+  else if (a === "lang") {
+    api.langs(id as Lang);
+    drawSheet();
+  } else if (a === "solid") {
     api.toggleSolid();
     drawPage();
   } else if (a === "theme") {
@@ -316,6 +322,16 @@ const channelTiles = () =>
        </button>`,
   ).join("") +
   `</div>`;
+
+// языки голосов — под каналами: что слышать в эфире
+const langChips = () => {
+  const on = chosen();
+  return (
+    `<h2 class="sec">${tr("voiceLangs")}</h2><div class="chips">` +
+    ALL_LANGS.map((l) => `<button class="pill" data-act="lang" data-id="${l.id}" aria-pressed="${on.includes(l.id)}">${on.includes(l.id) ? I.check : ""} ${l.name}</button>`).join("") +
+    `</div><p class="hintline">${tr("voiceLangsNote")}</p>`
+  );
+};
 
 const newReplies = () =>
   unheard ? `<button class="pill hot" data-act="new">${I.play} ${trn("newReplies", unheard)}</button>` : "";
@@ -456,7 +472,7 @@ function drawSheet() {
   else if (sheetView === "delMine") s.innerHTML = confirmSheet(tr("deleteMineTitle"), tr("deleteMineSub"), "del-mine-yes", tr("deleteMineYes"));
   else if (sheetView === "erase") s.innerHTML = confirmSheet(tr("eraseTitle"), tr("eraseSub"), "erase-yes", tr("eraseYes"));
   else if (sheetView === "channels") {
-    s.innerHTML = `<div class="grab"></div><div class="sh-title lone">${tr("whatListening")}</div>` + channelTiles();
+    s.innerHTML = `<div class="grab"></div><div class="sh-title lone">${tr("whatListening")}</div>` + channelTiles() + langChips();
   } else if (sheetView === "thread") {
     const n = post.replies.length;
     s.innerHTML =
