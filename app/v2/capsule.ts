@@ -17,6 +17,7 @@ import { num, tr, trn, translateDom } from "./i18n";
 import { t as t1 } from "../src/i18n";
 import { block, report, unblock, hide, visible } from "./safety";
 import { hasConsent } from "./privacy";
+import * as remote from "./remote";
 import { airFront, clearPlaying, openConsent, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -291,14 +292,14 @@ const DECODE_MS = 10_000;
 // ответы, при которых повтор не поможет: файла нет или доступа к нему нет. 408 и 429 — временные, повторяем
 const FINAL = new Set([400, 401, 403, 404, 410]);
 // сеть моргнула, зависла или сервер ответил ошибкой — ещё две попытки с паузой
-async function fetchBuf(file: string): Promise<AudioBuffer> {
+async function fetchBuf(url: string): Promise<AudioBuffer> {
   let err: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt) await sleep(700 * attempt);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), LOAD_MS);
     try {
-      const r = await fetch(`${import.meta.env.BASE_URL}seed/${file}.m4a`, { signal: ac.signal });
+      const r = await fetch(url, { signal: ac.signal });
       if (FINAL.has(r.status)) throw Object.assign(new Error(`HTTP ${r.status}`), { final: true });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.arrayBuffer();
@@ -325,13 +326,12 @@ function clipBuf(c: Clip): Promise<AudioBuffer> {
       return toBuffer(rec);
     });
   }
-  if (c.file) {
-    const file = c.file;
-    return cached(file, () => fetchBuf(file));
-  }
+  // голос из общего эфира или демо-файл: скачать и расшифровать
+  const url = c.url ?? (c.file ? `${import.meta.env.BASE_URL}seed/${c.file}.m4a` : "");
+  if (url) return cached(url, () => fetchBuf(url));
   return Promise.reject(new Error("no audio"));
 }
-const hasAudio = (c: Clip) => !!(c.buf || c.stored || c.file);
+const hasAudio = (c: Clip) => !!(c.buf || c.stored || c.file || c.url);
 
 let src: AudioBufferSourceNode | undefined;
 function silence() {
@@ -415,6 +415,8 @@ async function playVoice(i: number, from = 0) {
   passedF = from;
   playBuffer(buf, () => state === "air" && void playVoice(voice + 1), from * buf.duration);
   render();
+  // прослушивание засчитывается на сервере один раз за запуск (и одно на человека — это решает сервер)
+  if (v.remote && !heard.has(v.id)) remote.played(v.id);
   heard.add(VOICES[voice].id);
   const next = VOICES[(voice + 1) % VOICES.length];
   void clipBuf(next).catch(() => {}); // следующий — заранее
@@ -453,7 +455,8 @@ const rxColor = (r: string) => RX_COLOR[r] ?? "#ff4678";
 const marks = new Map<string, Mark[]>();
 function marksFor(id: string): Mark[] {
   let list = marks.get(id);
-  if (!list && id.startsWith("m")) marks.set(id, (list = [])); // свою запись ещё никто не слышал
+  // демо-реакции — только у демо-голосов; у своих и пришедших с сервера — настоящие, из эфира
+  if (!list && !/^s\d+$/.test(id)) marks.set(id, (list = []));
   if (!list) {
     let h = 0;
     for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -1041,6 +1044,7 @@ function send() {
     id: `m${Date.now()}`,
     kind: target.kind,
     to: target.kind === "reply" ? target.post.id : undefined,
+    publish: true, // в общий эфир — с согласия, данного уже для сервера
     title: target.kind === "reply" ? tr("titleReply", { name: target.post.name, dur: fmt(buf.duration) }) : tr("titleNew", { dur: fmt(buf.duration) }),
     at: Date.now(),
   };
@@ -1054,7 +1058,11 @@ function send() {
       // сохранено — звук в общей очереди памяти: отсюда он вытеснится, как остальные, и прочитается с устройства
       void cached(`rec:${rec.id}`, () => Promise.resolve(buf));
       place(rec, { stored: true });
-    } else place(rec, { buf });
+      void remote.flush(); // в общий эфир; без сети — дождётся её
+    } else {
+      place(rec, { buf });
+      void remote.sendNow(rec, buf); // на устройстве не сохранилась — отправляем из памяти
+    }
     state = "sent";
     render();
     setTimeout(() => {
@@ -1102,6 +1110,7 @@ async function removeRec(id: string) {
   buffers.delete(`rec:${id}`);
   liked.delete(id);
   heard.delete(id);
+  await remote.unpublish(id); // из общего эфира — если уже ушла
   await deleteRec(id);
   render();
   showWave();
@@ -1244,7 +1253,7 @@ function render() {
         ? ""
         : // сервера пока нет: запись остаётся на этом телефоне, другим людям не уходит — так и говорим
           (target.kind === "post" ? tr("savedPost") : tr("savedReply", { name: target.post.name })) +
-          tr(saved === "ok" ? "notSent" : saved === "full" ? "noSpace" : "saveFailed");
+          (saved === "ok" ? tr(remote.isLive() ? "sending" : "queued") : tr(saved === "full" ? "noSpace" : "saveFailed"));
   }
 }
 
@@ -1296,6 +1305,9 @@ tray.onclick = (e) => {
   const f = anchor ?? trackF();
   const mark: Mark = { f, r, mine: true, at: performance.now() };
   marksFor(VOICES[voice].id).push(mark);
+  // в общий эфир: другие увидят реакцию на этом месте записи
+  seenRx.add(rxKey(VOICES[voice].id, remote.uid(), r, f));
+  remote.react(VOICES[voice].id, r, f);
   playReaction(r, rxOut(false));
   stream(r, f, 5);
   drawPins(mark);
@@ -1355,6 +1367,69 @@ function restoreAuthor(name: string) {
   render();
 }
 
+// =================== общий эфир ===================
+
+// голоса с сервера встают в эфир, ответы — в ветки, реакции — на свои места на ленте
+const seenRx = new Set<string>();
+const rxKey = (post: string, user: string | null, emoji: string, at: number) => `${post}|${user}|${emoji}|${at.toFixed(3)}`;
+const findAny = (id: string): Clip | undefined => {
+  for (const p of [...VOICES, ...ASIDE, ...MY_POSTS]) {
+    if (p.id === id) return p;
+    const r = p.replies.find((x) => x.id === id);
+    if (r) return r;
+  }
+};
+// подпись голоса — первая фраза расшифровки или подписи, обрезанная по слову
+function hookOf(text: string | null) {
+  const t = text?.trim();
+  if (!t) return tr("untitled");
+  const first = t.split(/(?<=[.!?…])\s/)[0];
+  return first.length <= 52 ? first.replace(/[.,;:]$/, "") : first.slice(0, 52).replace(/\s+\S*$/, "") + "…";
+}
+const REAL_ENOUGH = 5; // живых голосов хватает на эфир — демо-записи убираем, чтобы не путать
+
+function mergeRemote(d: remote.Incoming) {
+  const me = remote.uid();
+  const was = VOICES[voice];
+  const fresh: Post[] = [];
+  for (const r of [...d.posts].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))) {
+    const known = findAny(r.id);
+    if (known) {
+      if (r.plays != null) (known as Post).plays = r.plays;
+      continue;
+    }
+    const mine = r.author_id === me;
+    const clip: Clip = { id: r.id, name: mine ? ME : r.author_name, text: r.text ?? "", url: remote.urlOf(r.audio_path), remote: true, mine };
+    if (!r.reply_to) {
+      const post: Post = { ...clip, hook: hookOf(r.text), replies: [], plays: r.plays };
+      fresh.push(post);
+      if (mine) MY_POSTS.push(post);
+    } else {
+      const parent = [...VOICES, ...ASIDE, ...MY_POSTS, ...fresh].find((p) => p.id === r.reply_to);
+      if (parent) parent.replies.push(clip);
+    }
+  }
+  if (fresh.length) VOICES.unshift(...fresh);
+  for (const x of d.reactions) {
+    const key = rxKey(x.post_id, x.user_id, x.emoji, x.at);
+    if (seenRx.has(key)) continue;
+    seenRx.add(key);
+    marksFor(x.post_id).push({ f: x.at, r: x.emoji as Reaction, mine: x.user_id === me });
+  }
+  if (VOICES.filter((p) => p.remote).length >= REAL_ENOUGH)
+    for (let i = VOICES.length - 1; i >= 0; i--) if (VOICES[i].file && !VOICES[i].mine) VOICES.splice(i, 1);
+  // ничего ещё не слушали — эфир начинается с самого нового живого голоса; иначе остаёмся на том же
+  const keep = heard.size ? VOICES.indexOf(was) : -1;
+  voice = keep >= 0 ? keep : 0;
+  if (VOICES[voice] !== was && !playing) {
+    voiceBuf = undefined;
+    heldF = 0;
+  }
+  applySafety();
+  if (!voiceBuf) showWave();
+  drawPins();
+}
+
 initScreens({
   hide: (id) => {
     hide(id);
@@ -1363,6 +1438,7 @@ initScreens({
   },
   report: (id, reason) => {
     report(id, reason);
+    remote.report(id, reason);
     applySafety();
     if (reason !== "crisis") say(t1("reported"));
   },
@@ -1538,6 +1614,8 @@ render();
 // волна первого голоса видна сразу, ещё до первого касания
 // свои записи с прошлых раз — обратно в эфир и в «Моё»; потом волна текущего голоса
 applySafety(); // скрытое и заблокированное в прошлые разы — сразу не в эфире
+remote.setName(ME);
+remote.start(ME, mergeRemote, () => say(tr("published")));
 $("more").onclick = () => {
   const v = VOICES[voice];
   if (v && !v.mine) openModerate(v.id, v.name);

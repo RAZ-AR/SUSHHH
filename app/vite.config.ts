@@ -45,7 +45,9 @@ const pwa = VitePWA({
     navigateFallbackDenylist: [/\/v2\//], // новая версия — своя страница, не старое приложение
     // страницу v2 не кэшируем: старое приложение обновляется только с согласия, и v2 застревала бы
     // в старой версии. Её скрипты с хэшем в имени кэшируются как обычно
-    globIgnores: ["**/node_modules/**/*", "v2/**"],
+    // сжатие голоса (Mediabunny, ≈1,7 МБ с запасным AAC) нужно только при отправке и только с сетью —
+    // не качаем его при установке приложения
+    globIgnores: ["**/node_modules/**/*", "v2/**", "assets/mediabunny*"],
     cleanupOutdatedCaches: true,
     runtimeCaching: [
       {
@@ -90,6 +92,10 @@ export default defineConfig(({ mode }) => ({
   build: {
     rollupOptions: {
       input: { main: "index.html", v2: "v2/index.html" },
+      output: {
+        // куски Mediabunny — под узнаваемым именем, чтобы исключить их из офлайн-кэша
+        chunkFileNames: (c) => (c.moduleIds.some((id) => id.includes("mediabunny")) ? "assets/mediabunny-[hash].js" : "assets/[name]-[hash].js"),
+      },
     },
   },
 }));

@@ -16,6 +16,7 @@ export type RemotePost = {
   env: number[] | null;
   palette: number;
   created_at: string;
+  plays?: number; // сколько человек послушали (колонка из миграции 20261113 — до неё её нет)
 };
 export type RemoteReaction = { post_id: string; user_id: string; emoji: string; at: number };
 export type Outgoing = { id: string; blob: Blob; replyTo?: string; at?: number; text?: string; env?: number[]; palette: number; tags: string[] };
@@ -83,6 +84,12 @@ export async function publish(o: Outgoing, name: string): Promise<boolean> {
 
 export function sendReaction(postId: string, emoji: string, at: number) {
   if (sb && uid) void sb.from("reactions").insert({ post_id: postId, user_id: uid, emoji, at: Math.min(1, Math.max(0, at)) }).then(() => {});
+}
+
+// прослушивание: сервер засчитывает одно на человека (функция count_play из миграции 20261113).
+// До миграции функции нет — ошибка не важна, считать просто нечем
+export function countPlay(postId: string) {
+  if (sb && uid) void sb.rpc("count_play", { p_id: postId }).then(() => {});
 }
 
 export function sendReport(postId: string, reason: string) {

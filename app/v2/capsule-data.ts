@@ -5,11 +5,24 @@
 
 // звук записи — одно из трёх: file — демо-файл; buf — записано сейчас и сохранить не удалось;
 // stored — сохранено на устройстве под своим id: в памяти не держится, читается и расшифровывается при игре
-export type Clip = { id: string; name: string; text: string; file?: string; buf?: AudioBuffer; stored?: boolean; mine?: boolean };
+// url — голос из общего эфира (сервер); remote — пришёл с сервера, а не из демо
+export type Clip = { id: string; name: string; text: string; file?: string; url?: string; buf?: AudioBuffer; stored?: boolean; mine?: boolean; remote?: boolean };
 // plays — сколько раз голос послушали (в прототипе — демо-числа, сервера ещё нет)
 export type Post = Clip & { hook: string; replies: Clip[]; plays?: number };
 
-export const ME = "вечерний_бег";
+// Псевдоним — общий со старой версией (тот же ключ на устройстве): один человек — одно имя в эфире.
+// Нет своего — выдаём случайный из списка и запоминаем
+const NAMES = ["полночь", "без_сахара", "тёплый_шум", "северный", "на_балконе", "медленно", "до_рассвета", "тихий_час", "лёгкий_ветер", "сонный_кот"];
+function pseudonym() {
+  try {
+    let n = localStorage.getItem("sushhh.name");
+    if (!n) localStorage.setItem("sushhh.name", (n = NAMES[Math.floor(Math.random() * NAMES.length)]));
+    return n;
+  } catch {
+    return NAMES[0];
+  }
+}
+export const ME = pseudonym();
 
 export const POSTS: Post[] = [
   { id: "s1", file: "s1", plays: 214, name: "тихий_трамвай", hook: "Впервые за неделю чувствую спокойствие", text: "Впервые за неделю чувствую спокойствие", replies: [] },

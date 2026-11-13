@@ -33,7 +33,9 @@
     "voice-glow": "^0.3.0"
   },
   "dependencies": {
+    "@mediabunny/aac-encoder": "^1.62.1",
     "@sapphi-red/web-noise-suppressor": "^0.4.1",
-    "@supabase/supabase-js": "^2.119.0"
+    "@supabase/supabase-js": "^2.119.0",
+    "mediabunny": "^1.62.1"
   }
 }

@@ -8,6 +8,10 @@ export type Meta = {
   to?: string; // id голоса, на который ответ
   title: string; // подпись в списке
   at: number; // когда записано
+  sent?: boolean; // уже в общем эфире; без сети запись ждёт на устройстве и уйдёт сама
+  // человек нажал «опубликовать», когда записи уже уходили в эфир (после согласия v2). Записи без этой
+  // отметки сделаны, когда приложение обещало «другим людям пока не отправляется», — они остаются на телефоне
+  publish?: boolean;
 };
 export type Saved = Meta & {
   rate: number;
@@ -101,6 +105,12 @@ export async function deleteRec(id: string) {
     tx.objectStore(STORE).delete(id);
     tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
   });
+}
+
+// запись ушла в эфир — отмечаем, чтобы очередь не отправила её второй раз
+export async function markSent(id: string) {
+  const rec = await getRec(id);
+  if (rec && !rec.sent) await saveRec({ ...rec, sent: true });
 }
 
 // одна запись целиком — когда её играют
