@@ -5,6 +5,13 @@ const open = async (page: Page) => {
   await page.goto("/v2/");
   await expect(page.locator("#hint")).toHaveText("коснись — и эфир заиграет");
 };
+// согласие на запись уже дано — кроме тестов, которые проверяют сам лист согласия
+const CONSENT = "sushhh.v2.consent";
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((k) => localStorage.setItem(k, JSON.stringify({ v: 1, at: 0 })), CONSENT);
+});
+const noConsent = (page: Page) => page.addInitScript((k) => localStorage.removeItem(k), CONSENT);
+
 // касание капсулы — пауза или «играть»
 const tapCapsule = (page: Page) => page.locator("#cap").click();
 
@@ -91,4 +98,44 @@ test("жалоба убирает голос, блокировка — авто�
   await page.locator(`[data-act="unblock"][data-id="${second}"]`).click();
   await page.locator(".dock-tab").nth(0).click();
   await expect(names.filter({ hasText: second })).toHaveCount(1);
+});
+
+test("первая запись: сначала согласие и возраст, потом запись; второй раз не спрашивает", async ({ page }) => {
+  await noConsent(page);
+  await open(page);
+  await page.locator("#stories .st.me").click();
+  const yes = page.locator("#consentYes");
+  await expect(yes).toBeDisabled(); // без подтверждения возраста записывать нельзя
+  await expect(page.locator("#main")).not.toHaveAttribute("aria-label", "Остановить запись");
+  await page.locator("#age").check();
+  await yes.click();
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Остановить запись");
+  // согласие запомнено с версией правил — в следующий раз запись начнётся сразу
+  expect(JSON.parse((await page.evaluate((k) => localStorage.getItem(k), CONSENT))!)).toMatchObject({ v: 1 });
+  await page.locator("#back").click();
+  await page.locator("#stories .st.me").click();
+  await expect(page.locator("#sheet")).not.toHaveClass(/open/); // лист согласия не открылся
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Остановить запись");
+});
+
+test("«Удалить все мои данные» стирает записи, блокировки и согласие", async ({ page }) => {
+  await open(page);
+  // своя запись и заблокированный автор
+  await page.locator("#stories .st.me").click();
+  await page.waitForTimeout(1200);
+  await page.locator("#main").click();
+  await page.locator("#main").click();
+  await expect(page.locator("#hint")).toContainText("Сохранено", { timeout: 5000 });
+  await page.evaluate(() => localStorage.setItem("sushhh.v2.blocked", JSON.stringify(["мандарин"])));
+
+  await page.locator(".dock-tab").nth(1).click();
+  await page.locator('[data-act="erase"]').click();
+  await page.locator('[data-act="erase-yes"]').click();
+  await page.waitForLoadState();
+  await expect(page.locator("#hint")).toHaveText("коснись — и эфир заиграет");
+
+  const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sushhh.v2.") && k !== "sushhh.v2.consent"));
+  expect(left).toEqual([]);
+  await expect(page.locator("#stories .st.mine")).toHaveCount(0);
+  await expect(page.locator("#stories .st .nm").filter({ hasText: "мандарин" })).toHaveCount(1);
 });

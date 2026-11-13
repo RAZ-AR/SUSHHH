@@ -52,6 +52,21 @@ function open() {
   return db;
 }
 
+// стереть все свои записи с устройства: закрыть базу и удалить её целиком
+export async function wipe() {
+  const d = await open();
+  d?.close();
+  db = undefined;
+  await new Promise<void>((resolve) => {
+    try {
+      const req = indexedDB.deleteDatabase(DB);
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
 // "ok" — сохранено; "full" — на устройстве кончилось место; "fail" — хранилище недоступно (приватный режим) или сбой
 export type SaveResult = "ok" | "full" | "fail";
 const isFull = (e: unknown) => (e as DOMException | null)?.name === "QuotaExceededError";

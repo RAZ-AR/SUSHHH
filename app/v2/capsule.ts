@@ -16,7 +16,8 @@ import { deleteRec, getRec, loadRecs, pack, saveRec, toBuffer, type Meta, type S
 import { num, tr, trn, translateDom } from "./i18n";
 import { t as t1 } from "../src/i18n";
 import { block, report, unblock, hide, visible } from "./safety";
-import { airFront, clearPlaying, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
+import { hasConsent } from "./privacy";
+import { airFront, clearPlaying, openConsent, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -879,6 +880,8 @@ async function pickFx(id: Fx) {
 let starting = false;
 async function startRec(t: Target = target) {
   if (state === "rec" || starting) return;
+  // первая запись — сначала согласие и возраст; согласился — запись начнётся из листа
+  if (!hasConsent()) return openConsent(t);
   starting = true;
   try {
     await beginRec(t);
@@ -1367,6 +1370,13 @@ initScreens({
     block(name);
     applySafety();
     say(t1("blocked", { name }));
+  },
+  removeAllMine: async () => {
+    const mine = [...MY_POSTS.map((p) => p.id), ...[...VOICES, ...ASIDE, ...MY_POSTS].flatMap((p) => p.replies.map((r) => r.id))].filter((id) =>
+      id.startsWith("m"),
+    );
+    for (const id of new Set(mine)) await removeRec(id);
+    say(tr("deletedMine"));
   },
   unblock: (name) => {
     unblock(name);

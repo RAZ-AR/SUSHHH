@@ -5,6 +5,7 @@ import { ASIDE, CHANNELS, ME, MY_POSTS, POSTS, esc, type Clip, type Post } from 
 import { tr, trn } from "./i18n";
 import { t } from "../src/i18n"; // тексты жалоб и блокировки — общие со старой версией, уже на 5 языках
 import { REASONS, blockedNames, type ReportReason } from "./safety";
+import { MIN_AGE, eraseAll, giveConsent } from "./privacy";
 
 export type Tab = "air" | "mine";
 export type Target = { kind: "reply"; post: Post } | { kind: "post" };
@@ -23,14 +24,18 @@ type Api = {
   block(name: string): void;
   report(id: string, reason: ReportReason): void;
   unblock(name: string): void;
+  removeAllMine(): Promise<void>; // удалить все свои записи с устройства
 };
-type Sheet = "channels" | "thread" | "mod";
+type Sheet = "channels" | "thread" | "mod" | "consent" | "privacy" | "delMine" | "erase";
+let consentFor: Target | undefined; // что человек хотел записать, когда его спросили о согласии
+let privacyFromConsent = false;
 // лист «⋯»: меню → причины жалобы → (если «нужна помощь») экран помощи; или подтверждение блокировки
 type ModStep = "menu" | "reasons" | "crisis" | "block";
 let mod: { id: string; name: string; step: ModStep } | undefined;
 type Scope = "page" | "sheet";
 
 const I = {
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4.5M5 4.5h11l-2 4 2 4H5"/></svg>',
   hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 6.1A9.7 9.7 0 0 1 12 6c5 0 8.5 4 9.5 6a13 13 0 0 1-2.6 3.4M6.4 7.6C4.4 8.9 3 10.7 2.5 12c1 2 4.5 6 9.5 6a9 9 0 0 0 4-.9M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
@@ -64,6 +69,11 @@ export const inboxCount = () => unheard;
 export function initScreens(a: Api) {
   api = a;
   el("scrim").onclick = () => closeSheet();
+  // согласие: кнопка «принимаю» оживает, только когда возраст подтверждён
+  el("sheet").addEventListener("change", (e) => {
+    const box = e.target as HTMLInputElement;
+    if (box.id === "age") (el("consentYes") as HTMLButtonElement).disabled = !box.checked;
+  });
   for (const scope of ["page", "sheet"] as const) {
     el(scope).onclick = (e) => {
       const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
@@ -118,6 +128,12 @@ export function closeSheet(resume = true) {
 }
 
 const redraw = (scope: Scope) => (scope === "sheet" ? drawSheet() : drawPage());
+
+// перед первой записью: что будет с голосом, правила, возраст. Согласился — запись начинается сразу
+export function openConsent(t: Target) {
+  consentFor = t;
+  openSheet("consent");
+}
 
 // «⋯» у чужого голоса или ответа: скрыть, пожаловаться, заблокировать автора
 export function openModerate(id: string, name: string) {
@@ -185,7 +201,28 @@ function act(a: string, id: string, scope: Scope) {
   else if (a === "unblock") {
     api.unblock(id);
     drawPage();
-  }
+  } else if (a === "consent-yes") {
+    if (!(el("age") as HTMLInputElement | null)?.checked) return;
+    giveConsent();
+    const t = consentFor;
+    consentFor = undefined;
+    closeSheet(false);
+    if (t) api.record(t);
+  } else if (a === "consent-no") {
+    consentFor = undefined;
+    closeSheet();
+  } else if (a === "privacy") {
+    privacyFromConsent = sheetView === "consent";
+    openSheet("privacy");
+  } else if (a === "privacy-close") {
+    if (privacyFromConsent && consentFor) openSheet("consent");
+    else closeSheet();
+  } else if (a === "del-mine") openSheet("delMine");
+  else if (a === "del-mine-yes") {
+    closeSheet(false);
+    void api.removeAllMine().then(drawPage);
+  } else if (a === "erase") openSheet("erase");
+  else if (a === "erase-yes") void eraseAll();
   else if (a === "theme") {
     api.toggleTheme();
     drawPage();
@@ -316,7 +353,13 @@ function drawPage() {
             .map((n) => `<button class="pill" data-act="unblock" data-id="${esc(n)}" aria-label="${t("unblock")}: ${esc(n)}">${I.ban} ${esc(n)}</button>`)
             .join("") +
           `</div>`
-        : "");
+        : "") +
+      // мои данные: правила, удалить свои записи, удалить всё
+      `<h2 class="sec">${tr("myData")}</h2><div class="chips">
+         <button class="pill" data-act="privacy">${I.shield} ${tr("privacy")}</button>
+         ${MY_POSTS.some((p) => deletable(p.id)) || myReplies().some(({ r }) => deletable(r.id)) ? `<button class="pill" data-act="del-mine">${I.trash} ${tr("deleteMine")}</button>` : ""}
+         <button class="pill danger" data-act="erase">${I.trash} ${tr("eraseAll")}</button>
+       </div>`;
   }
 }
 
@@ -374,9 +417,37 @@ function drawMod(s: HTMLElement) {
       head(t("blockTitle", { name }), t("blockSub")) + `<div class="tiles">${modTile("mod-block-yes", I.ban, t("block"), " danger")}</div>`;
 }
 
+const confirmSheet = (title: string, sub: string, act: string, label: string) =>
+  `<div class="grab"></div><div class="sh-title lone">${title}</div><p class="sh-note">${sub}</p>
+   <div class="tiles">${modTile(act, I.trash, label, " danger")}</div>`;
+
 function drawSheet() {
   const s = el("sheet");
   if (sheetView === "mod") drawMod(s);
+  else if (sheetView === "consent")
+    s.innerHTML =
+      `<div class="grab"></div><div class="sh-title lone">${tr("consentTitle")}</div>
+       <ul class="points">${["consent1", "consent2", "consent3", "consent4"].map((k) => `<li>${tr(k)}</li>`).join("")}</ul>
+       <label class="check"><input type="checkbox" id="age" /><span>${tr("ageConfirm", { age: MIN_AGE })}</span></label>
+       <div class="tiles">
+         <button class="tile mod care" id="consentYes" data-act="consent-yes" disabled aria-describedby="ageHint"><span class="mi">${I.mic}</span><b>${tr("consentAgree")}</b></button>
+       </div>
+       <p class="sh-note" id="ageHint">${tr("ageNeeded")}</p>
+       <div class="chips center">
+         <button class="pill" data-act="privacy">${I.shield} ${tr("privacy")}</button>
+         <button class="pill" data-act="consent-no">${tr("notNow")}</button>
+       </div>`;
+  else if (sheetView === "privacy")
+    s.innerHTML =
+      `<div class="sh-head"><button class="small" data-act="privacy-close" aria-label="${tr("close")}">${I.close}</button>
+         <div class="sh-title">${tr("privacy")}</div><span></span></div>
+       <dl class="points">` +
+      (["Stored", "Hear", "Delete", "Rules", "Age"] as const)
+        .map((k) => `<dt>${tr(`p${k}H`)}</dt><dd>${tr(`p${k}`, { age: MIN_AGE })}</dd>`)
+        .join("") +
+      `</dl>`;
+  else if (sheetView === "delMine") s.innerHTML = confirmSheet(tr("deleteMineTitle"), tr("deleteMineSub"), "del-mine-yes", tr("deleteMineYes"));
+  else if (sheetView === "erase") s.innerHTML = confirmSheet(tr("eraseTitle"), tr("eraseSub"), "erase-yes", tr("eraseYes"));
   else if (sheetView === "channels") {
     s.innerHTML = `<div class="grab"></div><div class="sh-title lone">${tr("whatListening")}</div>` + channelTiles();
   } else if (sheetView === "thread") {
