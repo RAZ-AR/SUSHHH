@@ -6,7 +6,8 @@
 // звук записи — одно из трёх: file — демо-файл; buf — записано сейчас и сохранить не удалось;
 // stored — сохранено на устройстве под своим id: в памяти не держится, читается и расшифровывается при игре
 // url — голос из общего эфира (сервер); remote — пришёл с сервера, а не из демо
-export type Clip = { id: string; name: string; text: string; file?: string; url?: string; buf?: AudioBuffer; stored?: boolean; mine?: boolean; remote?: boolean };
+// lang — язык голоса (у голосов с сервера, если автор его отметил); без отметки голос слышен всегда
+export type Clip = { id: string; name: string; text: string; file?: string; url?: string; buf?: AudioBuffer; stored?: boolean; mine?: boolean; remote?: boolean; lang?: import("../src/i18n").Lang };
 // plays — сколько раз голос послушали (в прототипе — демо-числа, сервера ещё нет)
 export type Post = Clip & { hook: string; replies: Clip[]; plays?: number };
 

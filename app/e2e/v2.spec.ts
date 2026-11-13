@@ -189,3 +189,18 @@ test("чёткий режим: включается по системной на
   await expect(html).toHaveAttribute("data-solid", "");
   expect(await page.locator(".dock-bar").evaluate((e) => getComputedStyle(e).backdropFilter)).toBe("none");
 });
+
+test("языки голосов: выбираются в листе каналов, последний выключить нельзя", async ({ page }) => {
+  await open(page);
+  await page.locator("#chan").click();
+  const ru = page.locator('[data-act="lang"][data-id="ru"]');
+  const en = page.locator('[data-act="lang"][data-id="en"]');
+  await expect(ru).toHaveAttribute("aria-pressed", "true"); // язык интерфейса
+  await expect(en).toHaveAttribute("aria-pressed", "false");
+  await en.click();
+  await expect(page.locator('[data-act="lang"][data-id="en"]')).toHaveAttribute("aria-pressed", "true");
+  await page.locator('[data-act="lang"][data-id="ru"]').click();
+  await page.locator('[data-act="lang"][data-id="en"]').click(); // последний — остаётся
+  await expect(page.locator('[data-act="lang"][data-id="en"]')).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => localStorage.getItem("sushhh.v2.langs"))).toBe('["en"]');
+});

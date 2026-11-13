@@ -6,6 +6,7 @@
 
 import { audioUrl, connect, countPlay, eraseAccount, fetchFeed, myUid, onNewPost, publish, removePost, sendReaction, sendReport, type RemotePost, type RemoteReaction } from "../src/backend";
 import { encode } from "./encode";
+import { langTag } from "./langs";
 import { pendingReports } from "./safety";
 import { getRec, loadRecs, markSent, toBuffer, type Meta } from "./store";
 
@@ -105,7 +106,7 @@ async function send(meta: Meta, buf: AudioBuffer) {
 async function upload(meta: Meta, buf: AudioBuffer) {
   const blob = await encode(buf);
   return publish(
-    { id: meta.id, blob, replyTo: meta.kind === "reply" ? meta.to : undefined, text: meta.title, env: envOf(buf), palette: 0, tags: [] },
+    { id: meta.id, blob, replyTo: meta.kind === "reply" ? meta.to : undefined, text: meta.title, env: envOf(buf), palette: 0, tags: [langTag()] }, // язык голоса — язык интерфейса автора
     myName,
   );
 }
