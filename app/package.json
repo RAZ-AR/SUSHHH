@@ -9,13 +9,15 @@
     "preview": "vite preview --host",
     "dev:phone": "vite --host --mode phone",
     "test": "vitest run",
-    "lint": "oxlint src",
-    "icons": "pwa-assets-generator"
+    "lint": "oxlint src v2",
+    "icons": "pwa-assets-generator",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@fontsource/inter-tight": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/onest": "^5.3.1",
+    "@playwright/test": "^1.64.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vite-pwa/assets-generator": "^2.0.0",

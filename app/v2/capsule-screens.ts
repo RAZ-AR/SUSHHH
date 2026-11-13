@@ -6,7 +6,7 @@ import { CHANNELS, ME, MY_POSTS, POSTS, esc, type Clip, type Post } from "./caps
 export type Tab = "air" | "mine";
 export type Target = { kind: "reply"; post: Post } | { kind: "post" };
 type Api = {
-  play(clip: Clip, onEnd: () => void): void;
+  play(clip: Clip, onEnd: () => void, onFail: () => void): void; // onFail — не загрузилось
   stop(): void;
   record(target: Target): void;
   resume(): void; // эфир снова на экране — играет дальше
@@ -102,6 +102,14 @@ export function closeSheet(resume = true) {
 
 const redraw = (scope: Scope) => (scope === "sheet" ? drawSheet() : drawPage());
 
+// звук оборвался не по касанию (звонок, Siri) — строка больше не показывает «играет»
+export function clearPlaying() {
+  if (!now) return;
+  now = "";
+  if (sheetView) drawSheet();
+  if (tab !== "air") drawPage();
+}
+
 // играть записи подряд, начиная с i-й; играющая подсвечена
 function playFrom(list: Clip[], i: number, scope: Scope) {
   const clip = list[i];
@@ -113,7 +121,14 @@ function playFrom(list: Clip[], i: number, scope: Scope) {
   }
   now = clip.id;
   redraw(scope);
-  api.play(clip, () => playFrom(list, i + 1, scope));
+  api.play(
+    clip,
+    () => playFrom(list, i + 1, scope),
+    () => {
+      now = "";
+      redraw(scope);
+    },
+  );
 }
 
 // что играть подряд: в ветке — исходный голос и ответы; в «Моём» — тот ряд, в котором нажали

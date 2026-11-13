@@ -1,27 +1,28 @@
-# Публикация PWA на GitHub Pages при каждом пуше в main
+# Проверка каждого PR и публикация PWA на GitHub Pages при каждом пуше в main.
+# В PR — только проверки (линтер, тесты, сквозные тесты, сборка); публикует только main.
 name: pages
 
 on:
   push:
     branches: [main]
     paths: ["app/**", ".github/workflows/pages.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
+# новый пуш в тот же PR отменяет его прошлую проверку; публикации main — своя очередь,
+# и проверка PR её никогда не отменит
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     defaults:
       run:
         working-directory: app
@@ -33,14 +34,38 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm test
+      # сквозные тесты v2 в настоящем Chromium с поддельным микрофоном
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      # что видел браузер, когда тест упал: снимки и трассы
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: app/test-results
+          retention-days: 7
       - run: npm run build
         env:
           BASE: /${{ github.event.repository.name }}/
       # SPA: неизвестный путь открывает приложение, а не 404
       - run: cp dist/index.html dist/404.html
-      - uses: actions/upload-pages-artifact@v3
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: app/dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4

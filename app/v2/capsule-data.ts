@@ -1,7 +1,11 @@
 // Демо-данные прототипа «капсула»: голоса эфира с ветками ответов, мои записи, каналы.
-// Аудио — из public/seed; записанное в прототипе хранится в buf и живёт до перезагрузки.
+// Аудио — из public/seed. Свои записи: пока не сохранены на устройстве — в buf (живут до перезагрузки),
+// сохранённые (stored) лежат в IndexedDB (store.ts) и читаются оттуда, только когда играют.
 
-export type Clip = { id: string; name: string; text: string; file?: string; buf?: AudioBuffer; mine?: boolean };
+
+// звук записи — одно из трёх: file — демо-файл; buf — записано сейчас и сохранить не удалось;
+// stored — сохранено на устройстве под своим id: в памяти не держится, читается и расшифровывается при игре
+export type Clip = { id: string; name: string; text: string; file?: string; buf?: AudioBuffer; stored?: boolean; mine?: boolean };
 export type Post = Clip & { hook: string; replies: Clip[] };
 
 export const ME = "вечерний_бег";
