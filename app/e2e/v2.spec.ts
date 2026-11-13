@@ -5,10 +5,12 @@ const open = async (page: Page) => {
   await page.goto("/v2/");
   await expect(page.locator("#hint")).toHaveText("коснись — и эфир заиграет");
 };
-// согласие на запись уже дано — кроме тестов, которые проверяют сам лист согласия
+// согласие на запись уже дано и подсказка жестов уже показана (init-скрипты повторяются при каждой загрузке,
+// поэтому в тесте удаления эти два ключа после перезагрузки снова есть) — кроме тестов, которые проверяют сам лист согласия
 const CONSENT = "sushhh.v2.consent";
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((k) => localStorage.setItem(k, JSON.stringify({ v: 2, at: 0 })), CONSENT);
+  await page.addInitScript(() => localStorage.setItem("sushhh.v2.tips", "1")); // подсказка жестов уже показана
   // настоящий сервер тесты не трогают: без него v2 работает на устройстве, записи ждут в очереди
   await page.route(/supabase\.co/, (r) => r.abort("internetdisconnected"));
 });
@@ -136,8 +138,33 @@ test("«Удалить все мои данные» стирает записи,
   await Promise.all([page.waitForEvent("load"), page.locator('[data-act="erase-yes"]').click()]);
   await expect(page.locator("#hint")).toHaveText("коснись — и эфир заиграет");
 
-  const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sushhh.v2.") && k !== "sushhh.v2.consent"));
+  const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sushhh.v2.") && k !== "sushhh.v2.consent" && k !== "sushhh.v2.tips"));
   expect(left).toEqual([]);
   await expect(page.locator("#stories .st.mine")).toHaveCount(0);
   await expect(page.locator("#stories .st .nm").filter({ hasText: "мандарин" })).toHaveCount(1);
+});
+
+test("подсказка жестов: при первом запуске, закрывается и больше не показывается", async ({ page }) => {
+  await page.addInitScript(() => localStorage.removeItem("sushhh.v2.tips"));
+  await open(page);
+  const coach = page.locator("#coach");
+  await expect(coach).toBeVisible();
+  await expect(coach).toContainText("Смахни вверх или вниз");
+  await page.locator("#coachOk").click();
+  await expect(coach).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem("sushhh.v2.tips"))).toBe("1");
+});
+
+test("кнопки для экранного диктора листают голоса и ставят паузу", async ({ page }) => {
+  await open(page);
+  const who = page.locator("#who");
+  const first = await who.textContent();
+  await page.locator("#srNext").focus();
+  await page.keyboard.press("Enter");
+  await expect(who).not.toHaveText(first!);
+  await expect(page.locator("#srPlay")).toHaveText("Пауза");
+  // кнопки невидимы, пока на них нет фокуса, — нажимаем как с клавиатуры
+  await page.locator("#srPlay").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#srPlay")).toHaveText("Слушать");
 });

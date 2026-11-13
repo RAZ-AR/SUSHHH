@@ -129,6 +129,16 @@ const D: Record<string, Row> = {
   eraseTitle: ["Delete all your data?", "Удалить все твои данные?", "Alle deine Daten löschen?", "¿Borrar todos tus datos?", "Supprimer toutes tes données ?"],
   eraseSub: ["Your published voices, pseudonym and reactions on the server; recordings, consent, theme, hidden and blocked people, reports on this phone. The language stays. This can't be undone.", "Твои голоса, псевдоним и реакции на сервере; записи, согласие, тема, скрытое и заблокированное, жалобы на этом телефоне. Язык останется. Вернуть нельзя.", "Deine Stimmen, dein Pseudonym und deine Reaktionen auf dem Server; Aufnahmen, Zustimmung, Design, Ausgeblendetes und Blockierte, Meldungen auf diesem Telefon. Die Sprache bleibt. Lässt sich nicht rückgängig machen.", "Tus voces, seudónimo y reacciones en el servidor; grabaciones, consentimiento, tema, lo oculto y bloqueado y denuncias en este teléfono. El idioma se queda. No se puede deshacer.", "Tes voix, ton pseudonyme et tes réactions sur le serveur ; enregistrements, accord, thème, masqués et bloqués, signalements sur ce téléphone. La langue reste. Impossible d'annuler."],
   eraseYes: ["Delete everything", "Удалить всё", "Alles löschen", "Borrarlo todo", "Tout supprimer"],
+  // подсказка жестов и кнопки для экранного диктора
+  coachTitle: ["How to listen", "Как слушать", "So hörst du zu", "Cómo escuchar", "Comment écouter"],
+  tipSwipe: ["Swipe up or down — next or previous voice", "Смахни вверх или вниз — следующий или предыдущий голос", "Nach oben oder unten wischen — nächste oder vorherige Stimme", "Desliza arriba o abajo: voz siguiente o anterior", "Glisse vers le haut ou le bas — voix suivante ou précédente"],
+  tipSide: ["Swipe sideways — another channel", "Смахни вбок — другой канал", "Zur Seite wischen — anderer Kanal", "Desliza de lado: otro canal", "Glisse sur le côté — autre chaîne"],
+  tipTap: ["Tap the oval — pause or play", "Коснись овала — пауза или «играть»", "Tippe aufs Oval — Pause oder Wiedergabe", "Toca el óvalo: pausa o reproducir", "Touche l'ovale — pause ou lecture"],
+  tipTape: ["Drag the wave beside the oval — rewind", "Тяни волну по краям от овала — перемотка", "Zieh die Welle neben dem Oval — spulen", "Arrastra la onda junto al óvalo: rebobinar", "Fais glisser l'onde à côté de l'ovale — avancer ou reculer"],
+  prevVoice: ["Previous voice", "Предыдущий голос", "Vorherige Stimme", "Voz anterior", "Voix précédente"],
+  nextVoice: ["Next voice", "Следующий голос", "Nächste Stimme", "Voz siguiente", "Voix suivante"],
+  playVoice: ["Play", "Слушать", "Abspielen", "Reproducir", "Écouter"],
+  pauseVoice: ["Pause", "Пауза", "Pause", "Pausa", "Pause"],
   // каналы
   ch_foryou: ["For you", "Для тебя", "Für dich", "Para ti", "Pour toi"],
   ch_foryou_note: ["picked from what you listen to", "подобрано по тому, что ты слушаешь", "passend zu dem, was du hörst", "elegido según lo que escuchas", "choisi d'après ce que tu écoutes"],

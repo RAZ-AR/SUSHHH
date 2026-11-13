@@ -722,6 +722,52 @@
       .tile.mod.care { --t1: rgb(255, 150, 40); --t2: var(--hot); }
       .hintline { margin: -4px 4px 10px; font-size: 12.5px; font-weight: 300; color: var(--ink-2); }
       .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+      /* ===== подсказка первого запуска ===== */
+      .coach { position: absolute; inset: 0; z-index: 4; display: grid; place-items: end center; padding: 0 16px calc(max(18px, env(safe-area-inset-bottom)) + 2 * var(--dock-h) + 2 * var(--dock-gap) + 8px); pointer-events: none; }
+      .coach[hidden], .stage.busy .coach, .stage.busy .sr-nav { display: none; }
+      .coach-card {
+        pointer-events: auto;
+        width: 100%;
+        max-width: 360px;
+        padding: 16px 18px 14px;
+        border-radius: 30px;
+        background: radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%), var(--dock);
+        box-shadow: inset 2px 0 1.5px -1px var(--lg-spec), inset 0 0 0 0.5px var(--edge), 14px 16px 36px -16px var(--lg-shadow);
+        backdrop-filter: blur(26px) saturate(180%);
+        -webkit-backdrop-filter: blur(26px) saturate(180%);
+        animation: coach-in 0.4s var(--ease) backwards;
+      }
+      .coach-title { font-size: 15px; font-weight: 600; text-align: center; margin-bottom: 10px; }
+      .coach-tips { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+      .coach-tips li { display: flex; align-items: center; gap: 12px; font-size: 13.5px; line-height: 1.35; }
+      .coach-tips svg { flex: none; width: 22px; height: 22px; color: var(--ink-2); }
+      .coach .pill { width: 100%; justify-content: center; }
+      /* «палец» показывает смахивание вверх по овалу */
+      .finger {
+        position: absolute;
+        left: 50%;
+        top: calc(var(--cap-y) - 118px); /* верхняя часть овала — нижнюю закрывает карточка подсказки */
+        width: 38px;
+        height: 38px;
+        margin: -19px 0 0 -19px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.35) 60%, transparent 72%);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5), 0 6px 18px -6px var(--lg-shadow);
+        animation: swipe-up 2.2s var(--ease) infinite;
+      }
+      @keyframes swipe-up {
+        0% { translate: 0 40px; opacity: 0; scale: 0.8; }
+        15% { opacity: 1; scale: 1; }
+        65% { translate: 0 -40px; opacity: 1; }
+        85%, 100% { translate: 0 -55px; opacity: 0; scale: 0.9; }
+      }
+      @keyframes coach-in { from { opacity: 0; translate: 0 16px; } }
+
+      /* кнопки для экранного диктора: невидимы, пока на них нет фокуса с клавиатуры */
+      .sr-nav { display: flex; justify-content: center; gap: 8px; }
+      .sr-only:not(:focus-visible) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      .sr-only:focus-visible { min-height: 36px; padding: 0 14px; margin-top: 6px; border-radius: 18px; font-size: 13px; background: var(--lg-fill-on); }
       .chips.center { justify-content: center; margin-top: 4px; }
       .pill.danger { color: var(--hot); }
       /* согласие и правила: короткие пункты, без юридической простыни */
@@ -987,7 +1033,8 @@
       @media (prefers-reduced-motion: reduce) {
         .small, .main, .pill, .tile, .tile::before, .row, .sheet, .scrim, .page, .dock-tab, .shape, .oval, .st, .tray, .rx, .fxb, .anchor { transition: none; }
         .rx, .rx::before, .rx::after, .rx .e, .tray.open .rx, .pin { animation: none !important; }
-        .halo, .cap { animation: none; }
+        .halo, .cap, .finger, .coach-card { animation: none; }
+        .finger { display: none; }
       }
     
 </style>
@@ -1005,6 +1052,15 @@
       <div class="shape ring" style="--k: 0.14"></div>
       <div class="shape cap" id="cap"></div>
       <div class="shape lens" aria-hidden="true"><canvas id="lensReel"></canvas></div>
+      <!-- подсказка при первом запуске: как управлять эфиром без кнопок -->
+      <div class="coach" id="coach" role="dialog" aria-labelledby="coachTitle" hidden>
+        <span class="finger" aria-hidden="true"></span>
+        <div class="coach-card">
+          <div class="coach-title" id="coachTitle"></div>
+          <ul class="coach-tips" id="coachTips"></ul>
+          <button class="pill" id="coachOk"></button>
+        </div>
+      </div>
       <div class="tapepins" id="pinsLayer" aria-hidden="true">
         <div class="pins-tape" id="pinsTape"><i class="anchor"></i><div class="pins" id="pins"></div></div>
       </div>
@@ -1048,6 +1104,12 @@
           <div class="who-row"><div class="who" id="who"></div><button class="more" id="more" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg></button></div>
           <div class="hook" id="hook"></div>
           <div class="hint" id="hint" aria-live="polite"></div>
+          <!-- для VoiceOver и клавиатуры — то же, что смахивания и касание овала; видны, только когда в фокусе -->
+          <div class="sr-nav">
+            <button class="sr-only" id="srPrev"></button>
+            <button class="sr-only" id="srPlay"></button>
+            <button class="sr-only" id="srNext"></button>
+          </div>
         </div>
       </header>
 

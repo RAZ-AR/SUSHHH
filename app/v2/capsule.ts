@@ -1381,6 +1381,9 @@ function render() {
     $("left").setAttribute("aria-expanded", String(trayOpen));
     setBtn($("right"), `${ICON.thread}<span>${tr("repliesBtn")}</span>` + (v.replies.length ? `<b class="badge">${num(v.replies.length)}</b>` : ""), tr("thread"));
     $("hint").textContent = notice || (playing ? "" : tr(paused ? "hintPaused" : "hintTap"));
+    $("srPrev").textContent = tr("prevVoice");
+    $("srNext").textContent = tr("nextVoice");
+    $("srPlay").textContent = tr(playing ? "pauseVoice" : "playVoice");
   } else if (state === "rec") {
     setBtn(main, ICON.stop, tr("stopRec"));
     $("label").textContent = tr("stop");
@@ -1638,7 +1641,7 @@ function drag(dx: number, dy: number) {
   stage.style.setProperty("--dy", `${dy}px`);
 }
 stage.addEventListener("pointerdown", (e) => {
-  down = state !== "air" || (e.target as HTMLElement).closest("button, .sheet, .scrim, .page, .dock, .stories, .fx, .tray, .reel") ? undefined : { x: e.clientX, y: e.clientY };
+  down = state !== "air" || (e.target as HTMLElement).closest("button, .sheet, .scrim, .page, .dock, .stories, .fx, .tray, .reel, .coach-card") ? undefined : { x: e.clientX, y: e.clientY };
   if (down) stage.classList.add("dragging");
   if (trayOpen && !(e.target as HTMLElement).closest(".tray, #left, .reel")) {
     closeTray();
@@ -1661,6 +1664,7 @@ function release(e: PointerEvent) {
   stage.classList.remove("dragging");
   drag(0, 0);
   if (state !== "air" || e.type === "pointercancel") return;
+  if (Math.abs(dx) > 60 || Math.abs(dy) > 50) hideCoach(); // жест получился — подсказка больше не нужна
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
     flyIn(dx < 0 ? 120 : -120, 0);
     stepChannel(dx < 0 ? 1 : -1);
@@ -1766,6 +1770,54 @@ $("avatar").textContent = [...ME][0] ?? "";
 $("avatar").setAttribute("aria-label", tr("profile", { name: ME }));
 $("avatar").onclick = () => showTab("mine");
 render();
+// =================== подсказка жестов ===================
+
+// Эфир управляется смахиваниями — их не видно. При первом запуске одна карточка объясняет все четыре
+// жеста, а «палец» показывает смахивание вверх. Закрывается кнопкой или первым же удачным жестом
+const TIPS = "sushhh.v2.tips";
+const TIP_ICON = {
+  vert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg>',
+  side: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>',
+  tap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8" opacity="0.5"/></svg>',
+  tape: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 10v4M8 7v10M12 9v6M16 5v14M20 10v4"/></svg>',
+};
+function showCoach() {
+  try {
+    if (localStorage.getItem(TIPS)) return;
+  } catch {
+    return; // без хранилища подсказка показывалась бы каждый раз — лучше не показывать
+  }
+  $("coachTitle").textContent = tr("coachTitle");
+  $("coachTips").innerHTML = (
+    [
+      ["vert", "tipSwipe"],
+      ["side", "tipSide"],
+      ["tap", "tipTap"],
+      ["tape", "tipTape"],
+    ] as const
+  )
+    .map(([icon, key]) => `<li>${TIP_ICON[icon]}<span>${tr(key)}</span></li>`)
+    .join("");
+  $("coachOk").textContent = t1("gotIt");
+  $("coach").hidden = false;
+}
+function hideCoach() {
+  if ($("coach").hidden) return;
+  $("coach").hidden = true;
+  try {
+    localStorage.setItem(TIPS, "1");
+  } catch {
+    // не запомнится — покажем в следующий раз
+  }
+}
+$("coachOk").onclick = hideCoach;
+setTimeout(showCoach, 700);
+
+// те же действия кнопками — для VoiceOver и клавиатуры
+$("srPrev").onclick = () => void playVoice(voice - 1);
+$("srNext").onclick = () => void playVoice(voice + 1);
+$("srPlay").onclick = () => togglePause();
+
 // новая версия сайта включается сама, когда ничего не записывается и не звучит (см. fresh.ts)
 keepFresh(() => state !== "air" || playing || starting || remote.uploading());
 
