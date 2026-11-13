@@ -18,6 +18,7 @@ import { t as t1 } from "../src/i18n";
 import { block, report, unblock, hide, visible } from "./safety";
 import { hasConsent } from "./privacy";
 import * as remote from "./remote";
+import { keepFresh } from "./fresh";
 import { airFront, clearPlaying, openConsent, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1607,9 +1608,8 @@ $("avatar").textContent = [...ME][0] ?? "";
 $("avatar").setAttribute("aria-label", tr("profile", { name: ME }));
 $("avatar").onclick = () => showTab("mine");
 render();
-// Service worker у сайта общий со старой версией, и обновляется он только с её согласия, чтобы
-// не оборвать запись. v2 его не торопит: её страница не кэшируется, а скрипты с хэшем в имени
-// и так берутся свежими.
+// новая версия сайта включается сама, когда ничего не записывается и не звучит (см. fresh.ts)
+keepFresh(() => state !== "air" || playing);
 
 // волна первого голоса видна сразу, ещё до первого касания
 // свои записи с прошлых раз — обратно в эфир и в «Моё»; потом волна текущего голоса
