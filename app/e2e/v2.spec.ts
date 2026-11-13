@@ -11,6 +11,7 @@ const CONSENT = "sushhh.v2.consent";
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((k) => localStorage.setItem(k, JSON.stringify({ v: 2, at: 0 })), CONSENT);
   await page.addInitScript(() => localStorage.setItem("sushhh.v2.tips", "1")); // подсказка жестов уже показана
+  await page.addInitScript(() => localStorage.setItem("sushhh.v2.member", "1")); // зарегистрирован — записывать можно
   // настоящий сервер тесты не трогают: без него v2 работает на устройстве, записи ждут в очереди
   await page.route(/supabase\.co/, (r) => r.abort("internetdisconnected"));
 });
@@ -138,7 +139,7 @@ test("«Удалить все мои данные» стирает записи,
   await Promise.all([page.waitForEvent("load"), page.locator('[data-act="erase-yes"]').click()]);
   await expect(page.locator("#hint")).toHaveText("коснись — и эфир заиграет");
 
-  const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sushhh.v2.") && k !== "sushhh.v2.consent" && k !== "sushhh.v2.tips"));
+  const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sushhh.v2.") && k !== "sushhh.v2.consent" && k !== "sushhh.v2.tips" && k !== "sushhh.v2.member"));
   expect(left).toEqual([]);
   await expect(page.locator("#stories .st.mine")).toHaveCount(0);
   await expect(page.locator("#stories .st .nm").filter({ hasText: "мандарин" })).toHaveCount(1);
@@ -203,4 +204,27 @@ test("языки голосов: выбираются в листе канало
   await page.locator('[data-act="lang"][data-id="en"]').click(); // последний — остаётся
   await expect(page.locator('[data-act="lang"][data-id="en"]')).toHaveAttribute("aria-pressed", "true");
   expect(await page.evaluate(() => localStorage.getItem("sushhh.v2.langs"))).toBe('["en"]');
+});
+
+test("гость: запись и реакции — через регистрацию, слушать — до 30 голосов в месяц", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sushhh.v2.member", "0"));
+  await open(page);
+  // записать — лист регистрации с полем почты
+  await page.locator("#stories .st.me").click();
+  await expect(page.locator("#joinEmail")).toBeVisible();
+  await expect(page.locator("#main")).not.toHaveAttribute("aria-label", "Остановить запись");
+  // неверная почта — подсказка
+  await page.locator("#joinEmail").fill("не почта");
+  await page.locator('[data-act="join-next"]').click();
+  await expect(page.locator(".field-err")).toContainText("не адрес почты");
+  // лимит: 30 голосов в этом месяце уже послушано. Закрыли лист — эфир пробует играть дальше,
+  // но новый голос гостю уже нельзя: открывается регистрация с объяснением
+  await page.evaluate(() => {
+    const ids = Array.from({ length: 30 }, (_, i) => `x${i}`);
+    localStorage.setItem("sushhh.v2.guestHeard", JSON.stringify({ month: new Date().toISOString().slice(0, 7), ids }));
+  });
+  await page.locator("#scrim").click({ position: { x: 10, y: 10 } });
+  await expect(page.locator("#sheet")).toContainText("в этом месяце они закончились");
+  await expect(page.locator("#sheet")).toHaveClass(/open/);
+  await expect(page.locator("#hint")).not.toHaveText("");
 });

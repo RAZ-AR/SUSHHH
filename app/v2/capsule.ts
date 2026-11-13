@@ -17,10 +17,11 @@ import { num, tr, trn, translateDom } from "./i18n";
 import { t as t1 } from "../src/i18n";
 import { block, report, unblock, hide, visible } from "./safety";
 import { hasConsent } from "./privacy";
+import { countListen, isMember, mayListen, refreshMember } from "./account";
 import * as remote from "./remote";
 import { audible, langOf, toggle as toggleLang } from "./langs";
 import { keepFresh } from "./fresh";
-import { airFront, clearPlaying, openConsent, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
+import { airFront, clearPlaying, openConsent, openJoin, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -583,6 +584,13 @@ async function playVoice(i: number, from = 0) {
   const mine = voice;
   const my = ticket;
   const v = VOICES[voice];
+  // гость послушал 30 голосов в этом месяце — дальше после регистрации (уже слушанные — можно)
+  if (!mayListen(v.id)) {
+    paused = true;
+    render();
+    openJoin("limit");
+    return;
+  }
   // не загрузилось: пауза с подсказкой, касание пробует снова. Дальше не листаем —
   // без сети следующие голоса не загрузились бы так же
   const failed = () => {
@@ -617,6 +625,7 @@ async function playVoice(i: number, from = 0) {
   render();
   // прослушивание засчитывается на сервере один раз за запуск (и одно на человека — это решает сервер)
   if (v.remote && !heard.has(v.id)) remote.played(v.id);
+  countListen(v.id);
   heard.add(VOICES[voice].id);
   const next = VOICES[(voice + 1) % VOICES.length];
   void clipBuf(next).catch(() => {}); // следующий — заранее
@@ -1084,6 +1093,8 @@ async function pickFx(id: Fx) {
 let starting = false;
 async function startRec(t: Target = target) {
   if (state === "rec" || starting) return;
+  // записывать и отвечать могут только зарегистрированные; гостю — лист регистрации
+  if (!isMember()) return openJoin("record");
   // первая запись — сначала согласие и возраст; согласился — запись начнётся из листа
   if (!hasConsent()) return openConsent(t);
   starting = true;
@@ -1494,6 +1505,8 @@ tray.innerHTML = ALL_RX.map(
   (r, i) => `<button class="rx" data-r="${r}" style="--i:${i};--ec:${rxColor(r)}" aria-label="${tr("reactionX", { r })}"><span class="e">${r}</span></button>`,
 ).join("");
 function openTray() {
+  // реакции — после регистрации: гость только слушает
+  if (!isMember()) return openJoin("react");
   trayOpen = true;
   anchor = trackF();
   tray.classList.add("open");
@@ -1636,6 +1649,7 @@ function mergeRemote(d: remote.Incoming) {
   if (!voiceBuf) showWave();
   drawPins();
   openPendingThread();
+  void refreshMember().then(render); // гость или зарегистрирован — спросить сервер
 }
 
 // касание уведомления «Тебе ответили голосом» открывает v2 с ?thread=<id> — показываем ветку,
@@ -1666,6 +1680,10 @@ initScreens({
     block(name);
     applySafety();
     say(t1("blocked", { name }));
+  },
+  joined: () => {
+    say(tr("joinDone"));
+    render();
   },
   removeAllMine: async () => {
     const mine = [...MY_POSTS.map((p) => p.id), ...[...VOICES, ...ASIDE, ...MY_POSTS].flatMap((p) => p.replies.map((r) => r.id))].filter((id) =>
