@@ -24,6 +24,7 @@
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "happy-dom": "^21.0.4",
     "oxlint": "^1.92.0",
+    "preact": "^11.0.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
