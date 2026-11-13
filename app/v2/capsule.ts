@@ -13,6 +13,7 @@ import { audioCtx } from "../src/audio";
 import { MEMES, REACTIONS, playReaction, type Reaction } from "../src/reactions";
 import { MY_POSTS, ME, POSTS, esc, type Clip, type Post } from "./capsule-data";
 import { deleteRec, getRec, loadRecs, pack, saveRec, toBuffer, type Meta, type SaveResult } from "./store";
+import { num, tr, trn, translateDom } from "./i18n";
 import { airFront, clearPlaying, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -45,7 +46,7 @@ let voice = 0;
 let playing = false;
 let paused = false; // эфир поставлен на паузу касанием — сам не продолжается
 let target: Target = { kind: "reply", post: POSTS[0] }; // что записываем: ответ на голос или новый пост
-let channelName = "Для тебя";
+let channelName = tr("ch_foryou");
 const liked = new Set<string>(); // голоса, на которые ты отреагировал, — по id: номер в ряду меняется
 const heard = new Set<string>(); // что уже слушали — овал в сторис бледнеет
 
@@ -92,6 +93,7 @@ function toggleTheme() {
     // не сохранится, но тема сменится сейчас
   }
   applyTheme();
+  if (voiceBuf) setTrack(voiceBuf); // бледная часть ленты — цветом текста новой темы
   render();
 }
 // на белом стекле сияние мягче: без белой сердцевины и яркого гребня, иначе цвет выгорает
@@ -143,8 +145,8 @@ function paintBeam() {
 // Новую запись из эфира начинает первый овал в ряду сторис.
 const DOCK_SCALE = 0.7;
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "air", label: "Эфир", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13.5" width="4.5" height="6.5" rx="2"/><rect x="16.5" y="13.5" width="4.5" height="6.5" rx="2"/></svg>' },
-  { id: "mine", label: "Моё", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 13.5l2.6-8A1.5 1.5 0 0 1 8 4.5h8a1.5 1.5 0 0 1 1.4 1L20 13.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/><path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20"/></svg>' },
+  { id: "air", label: tr("air"), icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13.5" width="4.5" height="6.5" rx="2"/><rect x="16.5" y="13.5" width="4.5" height="6.5" rx="2"/></svg>' },
+  { id: "mine", label: tr("mine"), icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 13.5l2.6-8A1.5 1.5 0 0 1 8 4.5h8a1.5 1.5 0 0 1 1.4 1L20 13.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/><path d="M4 13.5h4.5a3.5 3.5 0 0 0 7 0H20"/></svg>' },
 ];
 const dockRoot = createRoot($("dock"));
 let dockAt = 0; // где сейчас луч, в долях от −1 до 1 по ширине панели
@@ -159,7 +161,7 @@ function dockMotion() {
 }
 function paintDock() {
   const tab = getTab();
-  const mic = tab === "air" ? "Ответить голосом" : "Записать новый голос";
+  const mic = tr(tab === "air" ? "replyVoice" : "recordNew");
   dockRoot.render(
     createElement(
       Fragment,
@@ -242,12 +244,12 @@ function onCtxState() {
   if (!lost) return;
   if (state === "rec") {
     stopRec();
-    say("Запись прервалась — то, что успел сказать, сохранилось");
+    say(tr("recInterrupted"));
   } else if (state === "air" && playing && playingBuf === voiceBuf) {
     heldF = trackF();
     silence();
     paused = true;
-    say("Звук прервался — коснись, чтобы продолжить");
+    say(tr("soundInterrupted"));
   } else if (playing) {
     silence();
     clearPlaying(); // запись в листе или в «Моё» больше не «играет»
@@ -370,7 +372,7 @@ async function playClip(clip: Clip, onEnd: () => void, onFail: () => void) {
     if (my === ticket) playBuffer(buf, onEnd);
   } catch {
     if (my !== ticket) return;
-    say("Запись не загрузилась — проверь интернет и коснись ещё раз");
+    say(tr("clipFailed"));
     onFail();
   }
 }
@@ -397,13 +399,13 @@ async function playVoice(i: number, from = 0) {
     // без сети следующие голоса не загрузились бы так же
     if (voice !== mine || my !== ticket) return;
     paused = true;
-    say("Голос не загрузился — проверь интернет и коснись, чтобы попробовать ещё");
+    say(tr("voiceFailed"));
     render();
     return;
   }
   if (voice !== mine) return; // пока грузилось, переключили голос
   // тот же голос мог выпасть из памяти и расшифроваться заново — дорожка должна знать новый буфер
-  if (changed || buf !== voiceBuf || !wave2.childElementCount) setTrack(buf);
+  if (changed || buf !== voiceBuf || !tape) setTrack(buf);
   if (my !== ticket) return; // пока грузилось, включили другое (лист, запись)
   if (state !== "air" || !airFront()) return;
   if (ctx!.state === "suspended") void ctx!.resume();
@@ -459,42 +461,156 @@ function marksFor(id: string): Mark[] {
   return list;
 }
 
-const track = $("track");
-const wave1 = $("wave");
-const wave2 = $("waveLit");
+// =================== лента голоса ===================
+
+// Волна голоса — длинная лента, которая едет за стеклянным овалом справа налево. Звучит то место,
+// что стоит в центре овала. Овал — линза: внутри лента крупнее и ярче, сыгранное светится цветом
+// голоса, ещё не сыгранное бледное. Снаружи лента едва видна и тает к краям экрана.
+// Рисуется на canvas: лента целиком готовится один раз на голос, а в кадре только сдвигается.
+const track = $("track"); // лента снаружи: касание сбоку от овала перематывает, стрелки — тоже
+const reelCv = $<HTMLCanvasElement>("reel");
+const lensCv = $<HTMLCanvasElement>("lensReel");
+const pinsLayer = $("pinsLayer");
+const pinsTape = $("pinsTape");
 const pins = $("pins");
-let voiceBuf: AudioBuffer | undefined; // запись голоса на дорожке
-let heldF = 0; // место на дорожке, когда звук не идёт
+let voiceBuf: AudioBuffer | undefined; // запись голоса на ленте
+let heldF = 0; // место на ленте, когда звук не идёт
 let passedF = 0; // докуда запись уже проиграна — от этого места ищем реакции, которые пора проиграть
 let anchor: number | undefined; // куда встанет реакция, пока открыта панель
-let scrubF: number | undefined; // палец ведёт по дорожке
+let scrubF: number | undefined; // палец ведёт ленту
 
-// огибающая голоса: 56 столбиков
-const envs = new WeakMap<AudioBuffer, number[]>();
-function envelope(buf: AudioBuffer) {
-  let env = envs.get(buf);
+const BPS = 10; // столбиков на секунду записи
+const STEP = 6; // шаг столбика на ленте снаружи, px
+const BAR = 3; // ширина столбика
+const TAPE_H = 40; // высота волны снаружи
+const LENS = 1.9; // во сколько раз овал увеличивает ленту
+const RES = 4; // запас чёткости: в линзе столбики увеличены и на экранах 2× не должны мылиться
+
+let tapeW = 0; // длина ленты голоса, px
+let tape: { dim: HTMLCanvasElement; lit: HTMLCanvasElement } | undefined;
+let tapeDrawn = ""; // что нарисовано сейчас — лишний раз не перерисовываем
+
+// огибающая голоса: n столбиков 0..1
+const envs = new WeakMap<AudioBuffer, Map<number, number[]>>();
+function envelope(buf: AudioBuffer, n: number) {
+  let byN = envs.get(buf);
+  if (!byN) envs.set(buf, (byN = new Map()));
+  let env = byN.get(n);
   if (!env) {
     const ch = buf.getChannelData(0);
-    const n = 56;
-    const step = Math.floor(ch.length / n);
+    const step = Math.max(1, Math.floor(ch.length / n));
+    const hop = Math.max(1, Math.floor(step / 64));
     env = Array.from({ length: n }, (_, i) => {
       let sum = 0;
-      for (let j = i * step; j < (i + 1) * step; j += 16) sum += ch[j] * ch[j];
-      return Math.sqrt(sum / (step / 16));
+      let k = 0;
+      for (let j = i * step; j < (i + 1) * step && j < ch.length; j += hop, k++) sum += ch[j] * ch[j];
+      return Math.sqrt(sum / Math.max(k, 1));
     });
     const max = Math.max(...env, 1e-4);
-    env = env.map((v) => 0.12 + 0.88 * Math.min(1, v / max));
-    envs.set(buf, env);
+    env = env.map((v) => 0.1 + 0.9 * Math.min(1, v / max));
+    byN.set(n, env);
   }
   return env;
 }
+
+// лента целиком, два вида: бледная (впереди) и светящаяся (сыграно). Цвет бледной — цвет текста темы
+function paintTape(env: number[]) {
+  const ink = getComputedStyle(stage).getPropertyValue("--ink").trim() || "#fff";
+  const make = (fill: (g: CanvasRenderingContext2D) => string | CanvasGradient) => {
+    const cv = document.createElement("canvas");
+    cv.width = Math.ceil(tapeW * RES);
+    cv.height = Math.ceil(TAPE_H * RES);
+    const g = cv.getContext("2d")!;
+    g.scale(RES, RES);
+    g.fillStyle = fill(g);
+    env.forEach((h, i) => {
+      const bh = Math.max(2, h * TAPE_H);
+      g.beginPath();
+      g.roundRect(i * STEP + (STEP - BAR) / 2, (TAPE_H - bh) / 2, BAR, bh, BAR / 2);
+      g.fill();
+    });
+    return cv;
+  };
+  tape = {
+    dim: make(() => ink),
+    lit: make((g) => {
+      const gr = g.createLinearGradient(0, TAPE_H, 0, 0);
+      gr.addColorStop(0, "#ff4678");
+      gr.addColorStop(1, "#af46ff");
+      return gr;
+    }),
+  };
+  tapeDrawn = "";
+}
+
 function setTrack(buf: AudioBuffer) {
   voiceBuf = buf;
-  const bars = envelope(buf).map((h) => `<i style="--h:${h.toFixed(2)}"></i>`).join("");
-  wave1.innerHTML = wave2.innerHTML = bars;
+  const env = envelope(buf, Math.max(24, Math.round(buf.duration * BPS)));
+  tapeW = env.length * STEP;
+  paintTape(env);
+  track.dataset.bars = String(env.length);
+  pinsTape.style.setProperty("--W", `${tapeW}px`);
   drawPins();
 }
-// где сейчас бегунок, 0..1
+function clearTrack() {
+  tape = undefined;
+  tapeDrawn = "";
+  delete track.dataset.bars;
+  drawPins();
+}
+
+// canvas под размер на экране (с учётом плотности пикселей)
+function fit(cv: HTMLCanvasElement) {
+  const d = Math.min(devicePixelRatio || 1, 2);
+  const w = cv.clientWidth;
+  const h = cv.clientHeight;
+  if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) {
+    cv.width = Math.round(w * d);
+    cv.height = Math.round(h * d);
+    tapeDrawn = "";
+  }
+  const g = cv.getContext("2d")!;
+  g.setTransform(d, 0, 0, d, 0, 0);
+  return { g, w, h };
+}
+// лента в окне: место f — в центре, слева от центра сыграно (светится), справа впереди (бледно)
+function drawTape(cv: HTMLCanvasElement, f: number, k: number, dim: number, lit: number) {
+  const { g, w, h } = fit(cv);
+  g.clearRect(0, 0, w, h);
+  if (!tape || !w) return;
+  const cx = w / 2;
+  const W = tapeW * k;
+  const H = TAPE_H * k;
+  const x0 = cx - f * W;
+  const y0 = (h - H) / 2;
+  g.save();
+  g.beginPath();
+  g.rect(0, 0, cx, h);
+  g.clip();
+  g.globalAlpha = lit;
+  g.drawImage(tape.lit, x0, y0, W, H);
+  g.restore();
+  g.save();
+  g.beginPath();
+  g.rect(cx, 0, w - cx, h);
+  g.clip();
+  g.globalAlpha = dim;
+  g.drawImage(tape.dim, x0, y0, W, H);
+  g.restore();
+}
+// кадр ленты: снаружи и в линзе; реакции едут вместе с ней
+function moveTape(f: number, s: number) {
+  const key = `${f.toFixed(5)}|${s.toFixed(3)}|${tapeW}|${!!tape}`;
+  if (key === tapeDrawn) return;
+  tapeDrawn = key;
+  const light = theme === "light";
+  drawTape(reelCv, f, 1, light ? 0.22 : 0.18, light ? 0.55 : 0.5);
+  // овал сам уменьшен до --s, поэтому увеличение внутри — LENS / s: на экране лента всегда крупнее в LENS раз
+  drawTape(lensCv, f, LENS / s, light ? 0.5 : 0.42, 1);
+  pinsTape.style.transform = `translateX(${(-f * tapeW).toFixed(1)}px)`;
+}
+
+// где сейчас звучит, 0..1
 function trackF() {
   if (scrubF !== undefined) return scrubF;
   if (src && playingBuf && playingBuf === voiceBuf && ctx) return Math.min(1, Math.max(0, (ctx.currentTime - startedAt) / playingBuf.duration));
@@ -502,12 +618,14 @@ function trackF() {
 }
 function drawPins(fresh?: Mark) {
   const id = VOICES[voice].id;
-  pins.innerHTML = marksFor(id)
-    .map(
-      (m, i) =>
-        `<span class="pin${m.mine ? " mine" : ""}${m === fresh ? " new" : ""}" data-i="${i}" style="--x:${m.f.toFixed(4)};--ec:${rxColor(m.r)}">${m.r}</span>`,
-    )
-    .join("");
+  pins.innerHTML = !tape
+    ? ""
+    : marksFor(id)
+        .map(
+          (m, i) =>
+            `<span class="pin${m.mine ? " mine" : ""}${m === fresh ? " new" : ""}" data-i="${i}" style="--x:${m.f.toFixed(4)};--ec:${rxColor(m.r)}">${m.r}</span>`,
+        )
+        .join("");
 }
 function seek(f: number) {
   f = Math.min(0.999, Math.max(0, f));
@@ -516,26 +634,33 @@ function seek(f: number) {
   if (trayOpen) anchor = f;
   if (voiceBuf) void playVoice(voice, f);
 }
-const fAt = (x: number) => {
-  const r = track.getBoundingClientRect();
-  return (x - r.left - 16) / (r.width - 32);
-};
+const clampF = (f: number) => Math.min(1, Math.max(0, f));
+// Лента под пальцем: касание сбоку от овала — перемотать к этому месту ленты; протяжка — тянуть ленту,
+// как плёнку: повёл вправо — назад, влево — вперёд. Середину ленты закрывает овал, там жесты эфира
+let tug: { x: number; f: number; moved: boolean } | undefined;
 track.addEventListener("pointerdown", (e) => {
-  if (state !== "air") return;
+  if (state !== "air" || !tapeW) return;
   track.setPointerCapture(e.pointerId);
-  scrubF = Math.min(1, Math.max(0, fAt(e.clientX)));
+  tug = { x: e.clientX, f: trackF(), moved: false };
 });
 track.addEventListener("pointermove", (e) => {
-  if (scrubF !== undefined) scrubF = Math.min(1, Math.max(0, fAt(e.clientX)));
+  if (!tug) return;
+  const dx = e.clientX - tug.x;
+  if (Math.abs(dx) > 6) tug.moved = true;
+  if (tug.moved) scrubF = clampF(tug.f - dx / tapeW);
 });
-const endScrub = () => {
-  if (scrubF === undefined) return;
-  const f = scrubF;
+track.addEventListener("pointerup", (e) => {
+  if (!tug) return;
+  const r = track.getBoundingClientRect();
+  const f = tug.moved ? scrubF ?? tug.f : tug.f + (e.clientX - (r.left + r.width / 2)) / tapeW;
+  tug = undefined;
   scrubF = undefined;
   seek(f);
-};
-track.addEventListener("pointerup", endScrub);
-track.addEventListener("pointercancel", endScrub);
+});
+track.addEventListener("pointercancel", () => {
+  tug = undefined;
+  scrubF = undefined;
+});
 track.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
     e.preventDefault();
@@ -543,11 +668,11 @@ track.addEventListener("keydown", (e) => {
   }
 });
 
-// точка на дорожке в координатах экрана — оттуда взлетают эмодзи
+// место на ленте реакций в координатах экрана — оттуда взлетают эмодзи
 function trackPoint(f: number) {
-  const r = track.getBoundingClientRect();
+  const r = pinsLayer.getBoundingClientRect();
   const sr = stage.getBoundingClientRect();
-  return { x: r.left - sr.left + 16 + f * (r.width - 32), y: r.top - sr.top - 10 };
+  return { x: r.left - sr.left + r.width / 2 + (f - trackF()) * tapeW, y: r.top - sr.top + 30 - 10 };
 }
 
 // Поток эмодзи как в стримах: каждый поднимается от места на дорожке, покачиваясь вбок,
@@ -674,12 +799,12 @@ function say(text: string) {
 // Эффекты для своей записи. Считаются заранее целиком (OfflineAudioContext): то, что слышно
 // при прослушивании, и уходит в эфир.
 const FX = [
-  { id: "none", name: "Без эффекта" },
-  { id: "echo", name: "Эхо" },
-  { id: "hall", name: "Зал" },
-  { id: "low", name: "Ниже" },
-  { id: "high", name: "Выше" },
-  { id: "radio", name: "Радио" },
+  { id: "none" },
+  { id: "echo" },
+  { id: "hall" },
+  { id: "low" },
+  { id: "high" },
+  { id: "radio" },
 ] as const;
 type Fx = (typeof FX)[number]["id"];
 let fx: Fx = "none";
@@ -771,8 +896,8 @@ async function beginRec(t: Target) {
     session("playback");
     say(
       (e as Error)?.name === "NotAllowedError"
-        ? "Нет доступа к микрофону — разреши его для этого сайта в настройках браузера"
-        : "Микрофон недоступен на этом устройстве",
+        ? tr("micDenied")
+        : tr("micUnavailable"),
     );
     render();
     return;
@@ -825,7 +950,7 @@ let recTimer = 0;
 function micLost() {
   if (state !== "rec") return;
   stopRec();
-  if ((state as State) === "review") say("Микрофон отключился — то, что успел сказать, сохранилось");
+  if ((state as State) === "review") say(tr("micLost"));
   render();
 }
 // приложение свернули или заблокировали экран во время записи — заканчиваем её: записанное ждёт в просмотре
@@ -863,7 +988,7 @@ function stopRec(cancel = false) {
   if (total < c.sampleRate * 0.3 || peak < 1e-4) {
     // звука нет: слишком коротко или микрофон отдал тишину
     state = "air";
-    say(total < c.sampleRate * 0.3 ? "Слишком коротко — удерживай запись подольше" : "Микрофон молчит — проверь, не занят ли он другим приложением");
+    say(tr(total < c.sampleRate * 0.3 ? "tooShort" : "micSilent"));
     render();
     return;
   }
@@ -910,7 +1035,7 @@ function send() {
     id: `m${Date.now()}`,
     kind: target.kind,
     to: target.kind === "reply" ? target.post.id : undefined,
-    title: target.kind === "reply" ? `Ответ для ${target.post.name} · ${fmt(buf.duration)}` : `Новая запись · ${fmt(buf.duration)}`,
+    title: target.kind === "reply" ? tr("titleReply", { name: target.post.name, dur: fmt(buf.duration) }) : tr("titleNew", { dur: fmt(buf.duration) }),
     at: Date.now(),
   };
   const stored = pack(buf).then(
@@ -1002,18 +1127,44 @@ function setBtn(el: HTMLElement, icon: string, aria: string, show = true) {
 // голосу, только когда голос сменился: иначе любая перерисовка отбрасывала ряд, пока его листаешь.
 let storiesKey = "";
 let storiesOn = "";
+// что видно на овале голоса: сколько послушали, сколько ответов и какие эмоции чаще всего
+const STAT_ICON = {
+  plays: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  replies: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a7.5 7.5 0 0 1-11.3 6.5L4.5 19.5l1.1-3.9A7.5 7.5 0 1 1 20 12z"/></svg>',
+};
+function statsOf(p: Post) {
+  const plays = (p.plays ?? 0) + (heard.has(p.id) ? 1 : 0); // демо-число + твоё прослушивание
+  const counts = new Map<string, number>();
+  for (const m of marksFor(p.id)) counts.set(m.r, (counts.get(m.r) ?? 0) + 1);
+  const emo = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  return { plays, replies: p.replies.length, emo };
+}
+function storyStats(p: Post) {
+  const st = statsOf(p);
+  const emo = st.emo.map(([r, n]) => `<span>${r}<b>${num(n)}</b></span>`).join("");
+  const line = `<span class="stats"><span>${STAT_ICON.plays}${num(st.plays)}</span>${st.replies ? `<span>${STAT_ICON.replies}${num(st.replies)}</span>` : ""}</span>`;
+  const label = [trn("plays", st.plays), st.replies ? trn("replies", st.replies) : "", st.emo.length ? tr("reactionsOf", { list: st.emo.map(([r, n]) => `${r} ${n}`).join(", ") }) : ""]
+    .filter(Boolean)
+    .join(", ");
+  return { html: line + (emo ? `<span class="emo">${emo}</span>` : ""), label };
+}
+
 function drawStories(hidden: boolean) {
   const box = $("stories");
-  const key = hidden ? "" : `${voice}|${VOICES.map((p) => p.id + (heard.has(p.id) ? "+" : "")).join(",")}`;
+  const key = hidden
+    ? ""
+    : `${voice}|${VOICES.map((p) => `${p.id}${heard.has(p.id) ? "+" : ""}${p.replies.length}.${marksFor(p.id).length}`).join(",")}`;
   if (key === storiesKey) return;
   storiesKey = key;
   box.innerHTML = hidden
     ? ""
-    : `<button class="st me" data-i="new" aria-label="Записать новый голос"><span class="oval">${ICON.plus}<span class="nm">ты</span></span></button>` +
+    : `<button class="st me" data-i="new" aria-label="${tr("recordNew")}"><span class="oval">${ICON.plus}<span class="nm">${tr("you")}</span></span></button>` +
       VOICES.map((p, i) => {
-        const name = p.mine ? "ты" : esc(p.name);
-        return `<button class="st${p.mine ? " mine" : ""}${i === voice ? " on" : heard.has(p.id) ? " heard" : ""}" data-i="${i}" aria-label="Слушать: ${p.mine ? "твою запись" : name}"${i === voice ? ' aria-current="true"' : ""}>
-             <span class="oval"><span class="nm">${name}</span></span></button>`;
+        const name = p.mine ? tr("you") : esc(p.name);
+        const st = storyStats(p);
+        const aria = `${tr("listenTo", { name: p.mine ? tr("yourRecording") : name })}. ${st.label}`;
+        return `<button class="st${p.mine ? " mine" : ""}${i === voice ? " on" : heard.has(p.id) ? " heard" : ""}" data-i="${i}" aria-label="${aria}"${i === voice ? ' aria-current="true"' : ""}>
+             <span class="oval"><span class="nm">${name}</span>${st.html}</span></button>`;
       }).join("");
   const id = hidden ? "" : VOICES[voice].id;
   if (!id || id === storiesOn) return;
@@ -1035,60 +1186,55 @@ function render() {
   const main = $<HTMLButtonElement>("main");
   const replying = state !== "air";
   const air = state === "air";
-  $("who").textContent = air ? v.name : target.kind === "post" ? "новая запись" : `ответ для ${target.post.name}`;
+  $("who").textContent = air ? v.name : target.kind === "post" ? tr("newRecording") : tr("replyTo", { name: target.post.name });
   $("chan").innerHTML = `${esc(channelName)} ${ICON.down}`;
   $("chan").hidden = !air;
   $("hook").textContent = replying ? "" : v.hook;
   drawStories(replying);
   if (voiceBuf === undefined) {
-    wave1.innerHTML = wave2.innerHTML = "";
-    drawPins();
+    clearTrack();
   }
-  setBtn($("back"), ICON.close, "Назад в эфир", state === "rec" || state === "review");
+  setBtn($("back"), ICON.close, tr("back"), state === "rec" || state === "review");
   if (state !== "review") $("leftl").textContent = $("rightl").textContent = "";
   // эффекты — только когда запись готова
   $("fx").innerHTML =
-    state === "review" && take ? FX.map((f) => `<button class="fxb" data-fx="${f.id}" aria-pressed="${f.id === fx}">${f.name}</button>`).join("") : "";
+    state === "review" && take ? FX.map((f) => `<button class="fxb" data-fx="${f.id}" aria-pressed="${f.id === fx}">${tr(`fx_${f.id}`)}</button>`).join("") : "";
   if (state !== "air") closeTray();
   main.disabled = state === "sending" || state === "sent";
 
   if (state === "air") {
-    setBtn(main, ICON.mic, "Ответить голосом");
-    $("label").textContent = "ответить";
-    setBtn($("left"), ICON.heart, "Аудио-реакции");
+    setBtn(main, ICON.mic, tr("replyVoice"));
+    $("label").textContent = tr("replyLabel");
+    setBtn($("left"), `${ICON.heart}<span>${tr("reaction")}</span>`, tr("audioReactions"));
     $("left").classList.toggle("on", liked.has(v.id));
     $("left").setAttribute("aria-expanded", String(trayOpen));
-    setBtn($("right"), ICON.thread + (v.replies.length ? `<b class="badge">${v.replies.length}</b>` : ""), "Ветка ответов");
-    $("hint").textContent = notice || (playing ? "" : paused ? "пауза — коснись, чтобы продолжить" : "коснись — и эфир заиграет");
+    setBtn($("right"), `${ICON.thread}<span>${tr("repliesBtn")}</span>` + (v.replies.length ? `<b class="badge">${num(v.replies.length)}</b>` : ""), tr("thread"));
+    $("hint").textContent = notice || (playing ? "" : tr(paused ? "hintPaused" : "hintTap"));
   } else if (state === "rec") {
-    setBtn(main, ICON.stop, "Остановить запись");
-    $("label").textContent = "стоп";
+    setBtn(main, ICON.stop, tr("stopRec"));
+    $("label").textContent = tr("stop");
     setBtn($("left"), "", "", false);
     setBtn($("right"), "", "", false);
     $("left").classList.remove("on");
   } else if (state === "review") {
-    setBtn(main, ICON.send, "Опубликовать");
-    $("label").textContent = "опубликовать";
-    setBtn($("left"), ICON.again, "Переписать");
+    setBtn(main, ICON.send, tr("publishBtn"));
+    $("label").textContent = tr("publish");
+    setBtn($("left"), ICON.again, tr("redoBtn"));
     $("left").classList.remove("on");
-    setBtn($("right"), playing ? ICON.stop : ICON.play, playing ? "Остановить" : "Послушать", !!take);
-    $("leftl").textContent = "переписать";
-    $("rightl").textContent = !take ? "" : playing ? "стоп" : "послушать";
-    $("hint").textContent = notice || `${fmt(recLen)} · пока слышно только тебе`;
+    setBtn($("right"), playing ? ICON.stop : ICON.play, tr(playing ? "stopPlayBtn" : "listenBtn"), !!take);
+    $("leftl").textContent = tr("redo");
+    $("rightl").textContent = !take ? "" : tr(playing ? "stop" : "listen");
+    $("hint").textContent = notice || tr("onlyYou", { dur: fmt(recLen) });
   } else {
     setBtn($("left"), "", "", false);
     setBtn($("right"), "", "", false);
-    $("label").textContent = state === "sending" ? "летит…" : "в эфире";
+    $("label").textContent = tr(state === "sending" ? "flying" : "onAir");
     $("hint").textContent =
       state !== "sent"
         ? ""
         : // сервера пока нет: запись остаётся на этом телефоне, другим людям не уходит — так и говорим
-          (target.kind === "post" ? "Сохранено: первой в эфире и в «Моё»" : `Ответ для ${target.post.name} сохранён: в ветке и в «Моё»`) +
-          (saved === "ok"
-            ? " · другим людям пока не отправляется"
-            : saved === "full"
-              ? " · на телефоне кончилось место: после перезагрузки запись пропадёт"
-              : " · на устройстве сохранить не удалось: после перезагрузки запись пропадёт");
+          (target.kind === "post" ? tr("savedPost") : tr("savedReply", { name: target.post.name })) +
+          tr(saved === "ok" ? "notSent" : saved === "full" ? "noSpace" : "saveFailed");
   }
 }
 
@@ -1122,7 +1268,7 @@ $("fx").onclick = (e) => {
 let trayOpen = false;
 const tray = $("tray");
 tray.innerHTML = ALL_RX.map(
-  (r, i) => `<button class="rx" data-r="${r}" style="--i:${i};--ec:${rxColor(r)}" aria-label="Реакция ${r}"><span class="e">${r}</span></button>`,
+  (r, i) => `<button class="rx" data-r="${r}" style="--i:${i};--ec:${rxColor(r)}" aria-label="${tr("reactionX", { r })}"><span class="e">${r}</span></button>`,
 ).join("");
 function openTray() {
   trayOpen = true;
@@ -1174,7 +1320,7 @@ initScreens({
 let down: { x: number; y: number } | undefined;
 function flyIn(x: number, y: number) {
   if (calm) return;
-  for (const el of stage.querySelectorAll<HTMLElement>(".cap, .halo"))
+  for (const el of stage.querySelectorAll<HTMLElement>(".cap, .halo, .lens"))
     el.animate([{ translate: `calc(-50% + ${x}px) calc(-50% + ${y}px)`, opacity: 0 }, {}], { duration: 320, easing: "cubic-bezier(0.2, 0.9, 0.25, 1)" });
 }
 function drag(dx: number, dy: number) {
@@ -1182,9 +1328,9 @@ function drag(dx: number, dy: number) {
   stage.style.setProperty("--dy", `${dy}px`);
 }
 stage.addEventListener("pointerdown", (e) => {
-  down = state !== "air" || (e.target as HTMLElement).closest("button, .sheet, .scrim, .page, .dock, .stories, .fx, .tray, .track") ? undefined : { x: e.clientX, y: e.clientY };
+  down = state !== "air" || (e.target as HTMLElement).closest("button, .sheet, .scrim, .page, .dock, .stories, .fx, .tray, .reel") ? undefined : { x: e.clientX, y: e.clientY };
   if (down) stage.classList.add("dragging");
-  if (trayOpen && !(e.target as HTMLElement).closest(".tray, #left, .track")) {
+  if (trayOpen && !(e.target as HTMLElement).closest(".tray, #left, .reel")) {
     closeTray();
     render();
   }
@@ -1218,7 +1364,7 @@ stage.addEventListener("pointercancel", release);
 // с клавиатуры: стрелки листают голоса и каналы, пробел — пауза. На кнопках и дорожке клавиши свои
 document.addEventListener("keydown", (e) => {
   const t = e.target instanceof Element ? e.target : null;
-  if (state !== "air" || !airFront() || t?.closest("button, input, textarea, .track, .sheet, .page")) return;
+  if (state !== "air" || !airFront() || t?.closest("button, input, textarea, .reel, .sheet, .page")) return;
   if (e.key === " ") {
     e.preventDefault();
     togglePause();
@@ -1231,7 +1377,8 @@ document.addEventListener("keydown", (e) => {
 // =================== кадр ===================
 
 // текущие значения тянутся к целевым — отсюда мягкость: ничего не переключается рывком
-const cur = { s: 0.7, b: 0.85, ring: 0, bg: 0.25, c: [...HOT] as RGB };
+const AIR_S = 0.86; // размер овала в эфире — постоянный
+const cur = { s: AIR_S, b: 0.85, ring: 0, bg: 0.25, c: [...HOT] as RGB };
 let level = 0; // громкость 0..1, сглаженная
 let bump = 0; // короткий всплеск: сердце
 let last = performance.now();
@@ -1252,9 +1399,11 @@ function frame(t: number) {
   level += (raw - level) * (1 - Math.exp(-dt * (raw > level ? 22 : 6))); // растёт быстро, спадает плавно
   bump *= Math.exp(-dt * 5);
 
-  // в тишине овал не замирает: медленно дышит
-  const tg = { s: 0.7 + (calm ? 0 : 0.018 * Math.sin(t / 1100)), b: 0.85, ring: 0, bg: 0.25, c: HOT };
-  if (state === "air" && playing) Object.assign(tg, { s: 0.76 + level * 0.28, b: 1, bg: 0.6 + level * 0.3 });
+  // В эфире стеклянный овал стоит на месте одного размера — играет он или на паузе. Голос меняет
+  // только то, что внутри (сияние со дна) и снаружи (ореол, отсвет на экране, кромка). На паузе
+  // овал не замирает совсем: едва заметно дышит
+  const tg = { s: AIR_S + (calm || playing ? 0 : 0.012 * Math.sin(t / 1100)), b: 0.85, ring: 0, bg: 0.25, c: HOT };
+  if (state === "air" && playing) Object.assign(tg, { b: 1, bg: 0.6 + level * 0.4 });
   if (state === "rec") Object.assign(tg, { s: 0.78 + level * 0.3, b: 1, bg: 0.7 + level * 0.3, c: LIVE });
   if (state === "review") Object.assign(tg, { s: 0.6 + level * 0.2, b: 1, ring: 1, bg: 0.5, c: LIVE });
   // запись улетает: лепестки собраны в луч
@@ -1272,14 +1421,15 @@ function frame(t: number) {
   const st = stage.style;
   if (state === "air") {
     const f = trackF();
-    track.style.setProperty("--p", f.toFixed(4));
-    track.style.setProperty("--a", String(anchor ?? -1));
-    track.classList.toggle("anchoring", anchor !== undefined);
+    moveTape(f, cur.s);
+    pinsTape.style.setProperty("--a", String(anchor ?? -1));
+    pinsLayer.classList.toggle("anchoring", anchor !== undefined);
     track.setAttribute("aria-valuenow", String(Math.round(f * 100)));
     if (scrubF === undefined) pass(f);
   }
-  st.setProperty("--lv", level.toFixed(3));
-  st.setProperty("--s", (cur.s + bump * 0.12).toFixed(4));
+  // реакция-сердце — вспышка света, а не толчок овала
+  st.setProperty("--lv", Math.min(1, level + bump * 0.6).toFixed(3));
+  st.setProperty("--s", cur.s.toFixed(4));
   st.setProperty("--b", cur.b.toFixed(3));
   st.setProperty("--bg", cur.bg.toFixed(3));
   st.setProperty("--ring", cur.ring.toFixed(3));
@@ -1293,6 +1443,11 @@ function frame(t: number) {
   requestAnimationFrame(frame);
 }
 
+translateDom();
+// шапка: аватарка — первая буква псевдонима; касание открывает «Моё», где профиль
+$("avatar").textContent = [...ME][0] ?? "";
+$("avatar").setAttribute("aria-label", tr("profile", { name: ME }));
+$("avatar").onclick = () => showTab("mine");
 render();
 // Service worker у сайта общий со старой версией, и обновляется он только с её согласия, чтобы
 // не оборвать запись. v2 его не торопит: её страница не кэшируется, а скрипты с хэшем в имени

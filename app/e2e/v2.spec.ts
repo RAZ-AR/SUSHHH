@@ -12,7 +12,7 @@ test("эфир играет по касанию", async ({ page }) => {
   await open(page);
   await tapCapsule(page);
   await expect(page.locator("#hint")).toHaveText(""); // пока голос звучит, подсказки нет
-  await expect(page.locator("#wave i")).toHaveCount(56); // волна голоса на дорожке
+  await expect(page.locator("#track")).toHaveAttribute("data-bars", /^\d+$/); // лента голоса за овалом готова
 });
 
 test("запись: записать → опубликовать → после перезагрузки в эфире и в «Моё»", async ({ page }) => {
@@ -35,7 +35,7 @@ test("запись: записать → опубликовать → после
   // звук сохранённой записи читается с устройства, только когда она заиграет
   await mine.first().click();
   await expect(page.locator("#hint")).toHaveText("");
-  await expect(page.locator("#wave i")).toHaveCount(56);
+  await expect(page.locator("#track")).toHaveAttribute("data-bars", /^\d+$/); // лента голоса готова
 });
 
 test("сбой сети не глушит эфир: после ошибки касание пробует снова", async ({ page }) => {
@@ -47,7 +47,7 @@ test("сбой сети не глушит эфир: после ошибки ка
   await page.unroute("**/seed/*.m4a");
   await tapCapsule(page);
   await expect(page.locator("#hint")).toHaveText("", { timeout: 10_000 });
-  await expect(page.locator("#wave i")).toHaveCount(56);
+  await expect(page.locator("#track")).toHaveAttribute("data-bars", /^\d+$/); // лента голоса готова
 });
 
 test("свернули приложение во время записи — запись остановлена, записанное ждёт в просмотре", async ({ page }) => {

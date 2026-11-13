@@ -13,6 +13,7 @@ export default defineConfig({
     ...devices["Pixel 7"],
     baseURL: `http://localhost:${PORT}`,
     permissions: ["microphone"],
+    locale: "ru-RU", // тесты проверяют русские тексты; язык приложение берёт из системы
     launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"] },
     trace: "retain-on-failure",
   },
