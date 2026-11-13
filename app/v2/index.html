@@ -29,7 +29,7 @@
         --glass-on: rgba(255, 255, 255, 0.13);
         --edge: rgba(255, 255, 255, 0.09); /* тонкая кромка стекла */
         --edge-on: rgba(255, 255, 255, 0.28); /* кромка выбранного */
-        --dock: rgba(24, 24, 27, 0.78);
+        --dock: rgba(30, 31, 36, 0.5);
         --main: #fff; /* главная кнопка */
         --main-ink: #0b0b0c;
         --scrim: rgba(0, 0, 0, 0.6);
@@ -40,6 +40,38 @@
         --live: rgb(60, 220, 130); /* говоришь */
         --ease: cubic-bezier(0.2, 0.9, 0.25, 1);
         --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --dock-h: 64px; /* высота дока и кнопок над ним */
+        --dock-gap: 10px;
+
+        /* ===== жидкое стекло =====
+           Свет падает сверху слева. Отсюда четыре слоя, как у настоящей линзы:
+           1) тело — почти прозрачное, размывает и насыщает то, что позади;
+           2) блик — тонкий серп по верхней-левой кромке изнутри и мягкий глянец сверху;
+           3) кромка — светится и раскладывает свет в радугу: розовый слева, жёлто-зелёный справа снизу;
+           4) каустика — свет, прошедший сквозь стекло, собирается цветным пятном снизу справа.
+           Снаружи — ореол той же радуги и мягкая тень под стеклом. */
+        --page-hi: #141519; /* фон чуть светлее сверху — стеклу есть что преломлять */
+        /* Свет падает СБОКУ СЛЕВА, как на референсе: левый край стекла светится, правый уходит в тень
+           с тонкой холодной кромкой (свет, обогнувший стекло сзади). Отсюда объём */
+        --side-light: rgba(70, 130, 255, 0.3); /* холодный свет слева на фоне */
+        --side-warm: rgba(255, 140, 175, 0.14); /* тёплый отблеск снизу слева */
+        --lg-back: rgba(110, 225, 255, 0.55); /* кромка на теневой стороне — голубая */
+        --lg-side: rgba(165, 150, 255, 0.55); /* свет, вошедший в стекло слева, — сиренево-синий */
+        --lg-shade: rgba(0, 0, 0, 0.3); /* тень внутри стекла справа */
+        --lg-feather: rgba(150, 185, 255, 0.14); /* мягкий ореол по краю — край не режет */
+        --lg-fill: rgba(255, 255, 255, 0.055);
+        --lg-fill-on: rgba(255, 255, 255, 0.12);
+        --lg-blur: blur(18px) saturate(170%);
+        --lg-gloss: rgba(255, 255, 255, 0.1);
+        --lg-spec: rgba(255, 255, 255, 0.5);
+        --lg-spec-low: rgba(255, 255, 255, 0.1);
+        --lg-caustic: rgba(90, 220, 235, 0.16);
+        --lg-rim-op: 0.5;
+        --lg-disp-a: rgba(255, 130, 220, 0.2);
+        --lg-disp-b: rgba(255, 205, 110, 0.2);
+        --lg-disp-c: rgba(110, 240, 200, 0.16);
+        --lg-shadow: rgba(0, 0, 0, 0.6);
+        --lg-contact: rgba(0, 0, 0, 0.45);
         color-scheme: dark;
       }
       /* светлая тема: тот же свет со дна, но на белом стекле */
@@ -48,7 +80,7 @@
         --ink-2: rgba(23, 23, 26, 0.64);
         --page: #f1f1ef;
         --panel: #f8f8f6;
-        --card: rgba(255, 255, 255, 0.72);
+        --card: rgba(255, 255, 255, 0.4);
         --shine: rgba(255, 255, 255, 0.9);
         --well: #e6e6e3;
         --cap-a: #fff;
@@ -57,13 +89,36 @@
         --glass-on: rgba(0, 0, 0, 0.1);
         --edge: rgba(0, 0, 0, 0.08);
         --edge-on: rgba(0, 0, 0, 0.4);
-        --dock: rgba(255, 255, 255, 0.82);
+        --dock: rgba(255, 255, 255, 0.42);
         --main: #17171a;
         --main-ink: #fff;
         --scrim: rgba(30, 30, 28, 0.35);
         --frame: #d5d5d2;
         --tile-glow: 0.75;
         --live: rgb(40, 190, 105);
+        /* светлое стекло — как на референсе: ледяной фон, белое тело, яркая радужная кромка */
+        --page: #e6edf2;
+        --page-hi: #f4f8fb;
+        --side-light: rgba(110, 160, 255, 0.24);
+        --side-warm: rgba(255, 150, 185, 0.16);
+        --lg-back: rgba(50, 185, 230, 0.6);
+        --lg-side: rgba(150, 165, 255, 0.42);
+        --lg-shade: rgba(60, 86, 130, 0.12);
+        --lg-feather: rgba(255, 255, 255, 0.6);
+        --panel: rgba(244, 248, 251, 0.72);
+        --lg-fill: rgba(255, 255, 255, 0.34);
+        --lg-fill-on: rgba(255, 255, 255, 0.6);
+        --lg-gloss: rgba(255, 255, 255, 0.7);
+        --lg-spec: rgba(255, 255, 255, 0.98);
+        --lg-spec-low: rgba(255, 255, 255, 0.5);
+        --lg-caustic: rgba(64, 214, 228, 0.32);
+        --lg-rim-op: 0.95;
+        --lg-disp-a: rgba(255, 120, 200, 0.45);
+        --lg-disp-b: rgba(255, 196, 70, 0.5);
+        --lg-disp-c: rgba(70, 225, 170, 0.4);
+        --lg-shadow: rgba(60, 86, 118, 0.3);
+        --lg-contact: rgba(60, 86, 118, 0.16);
+        --cap-alpha: 32%; /* тело большой капсулы на светлом — почти прозрачное, видно ореол позади */
         color-scheme: light;
       }
       * { box-sizing: border-box; margin: 0; }
@@ -81,6 +136,66 @@
       button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
       button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
+      /* Составные слои стекла объявлены на самих стеклянных элементах, а не на :root: так они
+         пересчитываются, когда элемент меняет свои переменные (наведение, «включено», поворот кромки) */
+      .cap, .small, .pill, .fxb, .row, .oval, .del, .dock-bar, .dock .main, .dock-beam, .mic-beam, .tile, .pin, .tray, .main, .rx::before {
+        /* кромка-призма под боковой свет: слева (270°) самая яркая — белая с сиреневым и розовым,
+           сверху сиреневая, справа (90°) голубая и бирюзовая — свет обогнул стекло, снизу тёплый отблеск */
+        --lg-rim: conic-gradient(from var(--lg-ang, 0deg),
+          rgba(212, 196, 255, 0.75) 0deg, rgba(127, 220, 255, 0.7) 60deg, rgba(110, 236, 220, 0.55) 110deg,
+          rgba(158, 243, 168, 0.35) 150deg, rgba(255, 200, 170, 0.45) 200deg, #ffb3d9 235deg,
+          #fff 270deg, #ffe6f3 300deg, rgba(212, 196, 255, 0.75) 360deg);
+        --lg-surface:
+          radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%),
+          linear-gradient(90deg, transparent 48%, var(--lg-shade)),
+          radial-gradient(ellipse 46% 62% at 84% 66%, var(--lg-caustic), transparent 72%),
+          var(--lg-fill);
+        /* блик — вдоль левой кромки изнутри; справа — тонкая голубая кромка на теневой стороне */
+        --lg-inner:
+          inset 2.5px 0 2px -1px var(--lg-spec),
+          inset 14px 0 18px -12px var(--lg-side),
+          inset -1.5px 0 1.5px -0.5px var(--lg-back);
+        /* тень падает вправо, радужный ореол — розовый слева, жёлто-зелёный справа; мягкий ореол по краю */
+        --lg-outer:
+          0 0 3px 0.5px var(--lg-feather),
+          -6px 0 14px -6px var(--lg-disp-a),
+          7px 3px 16px -7px var(--lg-disp-b),
+          6px 8px 18px -8px var(--lg-disp-c),
+          14px 16px 36px -16px var(--lg-shadow),
+          3px 3px 6px -2px var(--lg-contact);
+        --lg-depth: var(--lg-inner), var(--lg-outer);
+        /* то же для мелочи: кнопки, бейджи, метки на дорожке */
+        --lg-depth-s:
+          inset 2px 0 1.5px -1px var(--lg-spec),
+          inset 8px 0 10px -7px var(--lg-side),
+          inset -1px 0 1px -0.5px var(--lg-back),
+          0 0 2px 0.5px var(--lg-feather),
+          -3px 0 8px -3px var(--lg-disp-a),
+          4px 2px 9px -4px var(--lg-disp-b),
+          7px 8px 16px -8px var(--lg-shadow),
+          2px 2px 3px -1px var(--lg-contact);
+      }
+
+      /* кромка-призма у всего стекла: тонкое кольцо, залитое радугой и вырезанное маской по краю */
+      .small, .pill, .fxb, .row, .oval, .del, .dock-bar, .dock .main, .tile, .tray, .main, .chan { position: relative; }
+      :is(.small, .pill, .fxb, .row, .oval, .del, .dock-bar, .dock .main, .tile, .pin, .tray, .main)::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        padding: var(--rim-w, 1.2px);
+        border-radius: inherit;
+        background: var(--lg-rim);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: var(--rim-op, var(--lg-rim-op));
+        filter: blur(0.6px); /* кромка чуть размыта — край стекла не режет, как у настоящей линзы */
+        pointer-events: none;
+        transition: opacity 0.25s;
+      }
+      @property --lg-ang { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+
       .stage {
         --c: var(--hot); /* цвет голоса: розовый — слушаешь, зелёный — говоришь */
         --s: 0.42; /* размер капсулы */
@@ -88,11 +203,19 @@
         --ring: 0; /* контуры: запись готова */
         --bg: 0.2; /* насколько свет голоса заливает экран */
         --lv: 0; /* громкость сейчас */
+        --cap-y: 57%; /* центр овала по высоте: ниже шапки и сторис, выше кнопок над доком */
         position: relative;
         width: min(100vw, 430px);
         height: var(--app-h, 100dvh); /* с экрана «Домой» на iPhone — высота экрана, см. capsule.ts */
         overflow: hidden;
-        background: var(--page);
+        /* clip, а не только hidden: спрятанный внизу лист (translateY) делает экран «длиннее», и браузер
+           прокручивал его при фокусе — ряд сторис уезжал за верхний край */
+        overflow: clip;
+        /* свет сбоку слева: холодный поток и тёплый отблеск у нижнего левого края */
+        background:
+          radial-gradient(70% 55% at -14% 46%, var(--side-light), transparent 70%),
+          radial-gradient(45% 30% at -6% 88%, var(--side-warm), transparent 70%),
+          radial-gradient(130% 70% at 30% 0%, var(--page-hi), var(--page) 70%);
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
@@ -111,8 +234,8 @@
       .shape {
         position: absolute;
         left: 50%;
-        top: 55%;
-        width: min(58%, 29dvh);
+        top: var(--cap-y);
+        width: min(58%, 28dvh);
         aspect-ratio: 1 / 1.85;
         border-radius: 999px;
         translate: calc(-50% + var(--dx, 0px)) calc(-50% + var(--dy, 0px)); /* овал тянется за пальцем */
@@ -121,10 +244,11 @@
       }
       .stage.dragging .shape { transition: none; }
       /* свечение вокруг овала: растёт и ярчает от громкости, цвет медленно плывёт */
+      /* овал в эфире стоит на месте — голос виден по ореолу: он растёт и ярчает сильнее самого стекла */
       .halo {
-        scale: calc(var(--s) * (1.04 + var(--lv) * 0.12));
+        scale: calc(var(--s) * (1.05 + var(--lv) * 0.24));
         background: var(--c);
-        opacity: calc(var(--b) * (0.2 + var(--lv) * 0.5));
+        opacity: calc(var(--b) * (0.22 + var(--lv) * 0.62));
         filter: blur(44px);
         animation: drift 11s ease-in-out infinite alternate;
       }
@@ -132,10 +256,63 @@
         from { filter: blur(44px) hue-rotate(-28deg); }
         to { filter: blur(44px) hue-rotate(46deg); }
       }
-      /* капсула — тёмное стекло; сияние внутри рисует библиотека voice-glow */
-      .cap { scale: var(--s); opacity: var(--b); box-shadow: 0 0 0 1px var(--edge), 0 30px 80px rgba(0, 0, 0, 0.18); }
+      /* капсула — жидкое стекло. Сияние голоса (voice-glow) поднимается внутри со дна, сквозь тело
+         видно размытый ореол позади. Поверх всего — блик, глянец и кромка-призма (::after).
+         Кромка медленно поворачивается и разгорается от громкости: голос «зажигает» стекло */
+      .cap {
+        --lg-ang: 0deg;
+        scale: var(--s);
+        opacity: var(--b);
+        box-shadow:
+          0 0 6px 1px var(--lg-feather),
+          -20px 0 44px -14px var(--lg-side),
+          16px 0 30px -18px var(--lg-back),
+          -14px 0 30px -12px var(--lg-disp-a),
+          14px 6px 36px -14px var(--lg-disp-b),
+          12px 18px 40px -18px var(--lg-disp-c),
+          30px 34px 70px -30px var(--lg-shadow),
+          6px 8px 16px -8px var(--lg-contact);
+        /* свет не стоит мёртво: кромка медленно покачивается на ±18°, но яркая сторона всегда слева */
+        animation: rim-sway 9s ease-in-out infinite alternate;
+      }
       .cap > div, .cap-fill { width: 100%; height: 100%; border-radius: 999px; }
-      .cap-fill { background: linear-gradient(var(--cap-a), var(--cap-b)); }
+      .cap-fill {
+        background:
+          radial-gradient(60% 110% at -6% 44%, var(--lg-gloss), transparent 62%),
+          linear-gradient(90deg, transparent 45%, var(--lg-shade)),
+          radial-gradient(ellipse 50% 46% at 82% 70%, var(--lg-caustic), transparent 72%),
+          linear-gradient(color-mix(in srgb, var(--cap-a) var(--cap-alpha, 55%), transparent), color-mix(in srgb, var(--cap-b) calc(var(--cap-alpha, 55%) - 15%), transparent));
+        backdrop-filter: var(--lg-blur);
+        -webkit-backdrop-filter: var(--lg-blur);
+      }
+      .cap::before, .cap::after { content: ""; position: absolute; inset: 0; z-index: 6; border-radius: 999px; pointer-events: none; }
+      /* объём от бокового света: широкое мягкое свечение вдоль левой стенки изнутри, тонкая яркая полоса
+         у самой кромки слева и холодная кромка справа на теневой стороне. Край чуть размыт */
+      .cap::before {
+        inset: 1.5%;
+        box-shadow:
+          inset 5px 0 4px -3px var(--lg-spec),
+          inset 52px 0 56px -38px var(--lg-side),
+          inset 20px 0 24px -18px var(--lg-spec),
+          inset -4px 0 5px -3px var(--lg-back),
+          inset -26px 0 34px -26px var(--lg-shade);
+        filter: blur(0.8px);
+      }
+      .cap::after {
+        padding: 2px;
+        background: var(--lg-rim);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: calc(var(--lg-rim-op) * (0.75 + var(--lv) * 0.5));
+        /* ореол-призма: копии кромки, сдвинутые в разные стороны своим цветом, — как дисперсия у линзы */
+        filter:
+          blur(0.7px)
+          drop-shadow(-3px 0 4px var(--lg-disp-a))
+          drop-shadow(3px 2px 5px var(--lg-disp-b))
+          drop-shadow(2px 5px 7px var(--lg-disp-c));
+      }
+      @keyframes rim-sway { from { --lg-ang: -18deg; } to { --lg-ang: 18deg; } }
       .ring {
         scale: calc(var(--s) * (1 + var(--ring) * var(--k)));
         opacity: calc(var(--ring) * (0.5 - var(--k) * 0.6));
@@ -143,8 +320,13 @@
       }
 
       .top { position: absolute; inset: max(14px, env(safe-area-inset-top)) 14px auto; text-align: center; }
-      .bar { display: flex; align-items: center; gap: 8px; }
+      .bar { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-bottom: 2px; }
       .bar [hidden] { display: none; }
+      .brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; letter-spacing: 0.16em; }
+      .brand .mark { display: block; overflow: visible; filter: drop-shadow(-2px 0 3px var(--lg-disp-a)) drop-shadow(3px 3px 4px var(--lg-shadow)); }
+      /* аватарка — маленькое стекло цвета твоего голоса с первой буквой псевдонима */
+      .avatar { --lg-caustic: rgba(60, 220, 130, 0.5); margin-left: auto; font-size: 16px; font-weight: 600; text-transform: uppercase; }
+      .stage.busy :is(.brand, .avatar) { display: none; }
       .grow { flex: 1; }
       .meta { padding: 0 30px; }
       .who { font-size: 16px; font-weight: 400; padding-top: 2px; overflow-wrap: anywhere; }
@@ -159,16 +341,22 @@
         border-radius: 50%;
         display: grid;
         place-items: center;
-        background: var(--glass);
-        box-shadow: inset 0 0 0 1px var(--edge);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        transition: scale 0.15s, background 0.2s;
+        background: var(--lg-surface);
+        box-shadow: var(--lg-depth-s);
+        backdrop-filter: var(--lg-blur);
+        -webkit-backdrop-filter: var(--lg-blur);
+        transition: scale 0.2s var(--spring), background 0.2s;
       }
-      .small:hover { background: var(--glass-on); }
+      .small:hover { --lg-fill: var(--lg-fill-on); }
       .small:active { scale: 0.9; }
       .small svg { width: 19px; height: 19px; }
-      .small.on { background: var(--hot); color: #fff; box-shadow: 0 0 24px rgba(255, 70, 120, 0.55); }
+      /* включённое стекло тонировано цветом голоса, блик и кромка остаются */
+      .small.on {
+        --lg-fill: color-mix(in srgb, var(--hot) 82%, transparent);
+        --lg-caustic: rgba(255, 200, 120, 0.5);
+        color: #fff;
+        box-shadow: var(--lg-depth-s), 0 0 24px rgba(255, 70, 120, 0.55);
+      }
       .bottom .small[hidden] { display: grid; visibility: hidden; }
       .badge {
         position: absolute;
@@ -178,7 +366,9 @@
         height: 18px;
         padding: 0 5px;
         border-radius: 9px;
-        background: var(--hot);
+        z-index: 3;
+        background: radial-gradient(70% 130% at -8% 42%, rgba(255, 255, 255, 0.55), transparent 62%), var(--hot);
+        box-shadow: inset 1px 1px 0.5px -0.5px rgba(255, 255, 255, 0.9), 0 3px 8px -2px rgba(255, 70, 120, 0.6);
         color: #14060b;
         font-size: 11px;
         font-weight: 400;
@@ -194,16 +384,21 @@
         align-items: center;
         gap: 6px;
         font-size: 14px;
-        background: var(--glass);
-        box-shadow: inset 0 0 0 1px var(--edge);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        transition: scale 0.15s, background 0.2s;
+        background: var(--lg-surface);
+        box-shadow: var(--lg-depth-s);
+        backdrop-filter: var(--lg-blur);
+        -webkit-backdrop-filter: var(--lg-blur);
+        transition: scale 0.2s var(--spring), background 0.2s;
       }
-      .pill:hover { background: var(--glass-on); }
+      .pill:hover { --lg-fill: var(--lg-fill-on); }
       .pill:active { scale: 0.96; }
       .pill svg { width: 14px; height: 14px; }
-      .pill.hot { background: var(--hot); color: #14060b; box-shadow: 0 0 28px rgba(255, 70, 120, 0.45); }
+      .pill.hot {
+        --lg-fill: color-mix(in srgb, var(--hot) 85%, transparent);
+        --lg-caustic: rgba(255, 200, 120, 0.5);
+        color: #14060b;
+        box-shadow: var(--lg-depth-s), 0 0 28px rgba(255, 70, 120, 0.45);
+      }
 
       .bottom {
         position: absolute;
@@ -214,8 +409,29 @@
       }
       .side { display: grid; justify-items: center; gap: 8px; width: 72px; }
       .side.end { justify-self: end; }
-      .bottom.air .side { width: 44px; }
       .bottom.air .label { display: none; }
+      /* В эфире «реакция» и «ответы» — два стеклянных овала в одну строку прямо над доком:
+         вместе ровно в ширину дока, высотой с док, зазор — как между панелью и микрофоном дока */
+      .bottom.air {
+        inset: auto 16px calc(max(18px, env(safe-area-inset-bottom)) + var(--dock-h) + var(--dock-gap));
+        grid-template-columns: 1fr 1fr;
+        gap: var(--dock-gap);
+      }
+      .bottom.air .side, .bottom.air .side.end { width: auto; display: block; justify-self: stretch; }
+      .bottom.air .mainwrap { display: none; }
+      .bottom.air .small {
+        width: 100%;
+        height: var(--dock-h);
+        border-radius: calc(var(--dock-h) / 2); /* овал, как док */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        font-size: 14px;
+      }
+      .bottom.air .small svg { width: 21px; height: 21px; }
+      .bottom.air .small:active { scale: 0.97; }
+      .bottom.air .small .badge { position: static; margin-left: -2px; }
 
       /* эффекты для своей записи: ряд стеклянных овалов над кнопками */
       .fx { position: absolute; inset: auto 0 calc(max(26px, env(safe-area-inset-bottom)) + 118px); display: flex; gap: 8px; padding: 4px 18px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
@@ -228,31 +444,31 @@
         border-radius: 999px;
         font-size: 13.5px;
         color: var(--ink-2);
-        background: var(--card);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine);
-        transition: scale 0.15s, color 0.2s;
+        background: var(--lg-surface);
+        box-shadow: var(--lg-depth-s);
+        transition: scale 0.2s var(--spring), color 0.2s;
       }
       .fxb:active { scale: 0.95; }
       .fxb[aria-pressed="true"] {
+        --rim-op: 1;
         color: var(--ink);
-        box-shadow: inset 0 0 0 1.5px var(--edge-on);
-        background: radial-gradient(ellipse 60% 70% at 50% 118%, var(--live), transparent 72%), var(--card);
+        background: radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%), radial-gradient(ellipse 60% 70% at 50% 118%, var(--live), transparent 72%), var(--lg-fill);
       }
 
       /* аудио-эмодзи: сердце раскрывает стеклянную панель, каждый овал — реакция со звуком */
       .tray {
         position: absolute;
-        inset: auto 16px calc(max(18px, env(safe-area-inset-bottom)) + 140px);
+        inset: auto 16px calc(max(18px, env(safe-area-inset-bottom)) + 2 * var(--dock-h) + 2 * var(--dock-gap) + 6px);
         z-index: 3;
         display: grid;
         grid-template-columns: repeat(6, 1fr);
         gap: 8px 6px;
         padding: 12px;
         border-radius: 40px;
-        background: var(--dock);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine), 0 20px 50px rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(24px);
-        -webkit-backdrop-filter: blur(24px);
+        background: radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%), radial-gradient(ellipse 58% 46% at 74% 90%, var(--lg-caustic), transparent 72%), var(--dock);
+        box-shadow: var(--lg-depth);
+        backdrop-filter: blur(26px) saturate(180%);
+        -webkit-backdrop-filter: blur(26px) saturate(180%);
         transform-origin: 8% 100%;
         opacity: 0;
         scale: 0.9;
@@ -272,10 +488,11 @@
         font-size: 25px;
         overflow: hidden;
         background:
+          radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%),
           radial-gradient(ellipse 34% 22% at 50% 104%, rgba(255, 255, 255, 0.7), transparent 70%),
           radial-gradient(ellipse 80% 52% at 50% 110%, var(--ec), transparent 74%),
-          var(--card);
-        box-shadow: inset 0 1px 0 var(--shine), 0 10px 22px -12px var(--ec);
+          var(--lg-fill);
+        box-shadow: inset 2px 0 1.5px -1px var(--lg-spec), inset -1px 0 1px -0.5px var(--lg-back), 0 10px 22px -12px var(--ec);
         transition: scale 0.15s, box-shadow 0.2s;
       }
       .rx::before {
@@ -285,11 +502,12 @@
         z-index: -1;
         padding: 1.5px;
         border-radius: inherit;
-        background: conic-gradient(from var(--ang), #ff4678, #ffc83c, #3cdc82, #3cbeff, #af46ff, #ff4678);
+        --lg-ang: var(--ang);
+        background: var(--lg-rim);
         -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
         -webkit-mask-composite: xor;
         mask-composite: exclude;
-        opacity: 0.6;
+        opacity: var(--lg-rim-op);
         animation: spin 5s linear infinite;
       }
       /* блик пробегает по стеклу — эмодзи переливаются */
@@ -311,7 +529,7 @@
         animation: bob 3.4s ease-in-out infinite;
         animation-delay: calc(var(--i) * -0.29s);
       }
-      .rx:hover { box-shadow: inset 0 1px 0 var(--shine), 0 12px 26px -10px var(--ec); }
+      .rx:hover { box-shadow: inset 2px 0 1.5px -1px var(--lg-spec), inset -1px 0 1px -0.5px var(--lg-back), 0 12px 26px -10px var(--ec); }
       .rx:active { scale: 0.86; }
       .tray.open .rx { animation: pop 0.52s var(--spring) backwards; animation-delay: calc(var(--i) * 26ms); }
       @property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
@@ -333,78 +551,102 @@
         filter: drop-shadow(0 0 14px var(--ec)) drop-shadow(0 6px 8px rgba(0, 0, 0, 0.3));
       }
 
-      /* ===== дорожка записи: стеклянная полоса с волной, бегунком и реакциями ===== */
-      .track {
-        --p: 0;
-        --a: -1;
+      /* ===== лента голоса: едет за стеклянным овалом, овал — линза =====
+         Волна голоса — длинная лента поперёк экрана на высоте центра овала. Она едет справа налево,
+         и сейчас звучит то место, что стоит в центре овала. Снаружи лента бледная и тает к краям;
+         внутри овала (.lens) та же лента крупнее и ярче, сыгранное светится цветом голоса.
+         Касание ленты сбоку от овала перематывает, протяжка — двигает ленту пальцем. */
+      .reel {
         position: absolute;
-        z-index: 2;
-        left: 76px;
-        right: 76px;
-        bottom: calc(max(18px, env(safe-area-inset-bottom)) + 84px);
-        height: 44px;
-        border-radius: 999px;
-        background: var(--card);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
+        left: 0;
+        right: 0;
+        top: var(--cap-y);
+        height: 96px;
+        translate: 0 -50%;
         cursor: pointer;
         touch-action: none;
+        -webkit-mask: linear-gradient(90deg, transparent 2%, #000 22%, #000 78%, transparent 98%);
+        mask: linear-gradient(90deg, transparent 2%, #000 22%, #000 78%, transparent 98%);
       }
-      .track:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-      .wave { position: absolute; inset: 11px 16px; display: flex; align-items: center; gap: 2px; pointer-events: none; }
-      .wave i { flex: 1; height: calc(var(--h) * 100%); min-height: 2px; border-radius: 2px; background: var(--ink); opacity: 0.2; }
-      .wave.lit { clip-path: inset(0 calc((1 - var(--p)) * 100%) 0 0); }
-      .wave.lit i { opacity: 1; background: linear-gradient(to top, var(--hot), #af46ff); }
-      .head, .anchor { position: absolute; pointer-events: none; }
-      .head { top: 7px; bottom: 7px; width: 2px; border-radius: 1px; background: var(--ink); left: calc(16px + var(--p) * (100% - 32px)); translate: -50% 0; }
+      .reel canvas, .lens canvas { display: block; width: 100%; height: 100%; }
+      .reel:focus-visible { outline: none; }
+      .reel:focus-visible ~ .lens { outline: 2px solid var(--ink); outline-offset: 6px; }
+      /* линза: тот же овал, что у капсулы, поверх неё; лента внутри обрезана чуть внутри кромки
+         и тает у боков — будто изображение уходит за изгиб стекла */
+      .lens {
+        z-index: 1;
+        pointer-events: none;
+        scale: var(--s);
+        opacity: var(--b);
+        clip-path: inset(2.5% round 999px);
+        -webkit-mask: linear-gradient(90deg, transparent 3%, #000 24%, #000 76%, transparent 97%);
+        mask: linear-gradient(90deg, transparent 3%, #000 24%, #000 76%, transparent 97%);
+      }
+      /* реакции едут на ленте чуть ниже волны и вспыхивают, проходя центр овала */
+      .tapepins {
+        position: absolute;
+        z-index: 2;
+        left: 0;
+        right: 0;
+        top: calc(var(--cap-y) + 16px);
+        height: 60px; /* у маски должна быть высота — иначе она спрятала бы всё */
+        pointer-events: none;
+        -webkit-mask: linear-gradient(90deg, transparent 2%, #000 20%, #000 80%, transparent 98%);
+        mask: linear-gradient(90deg, transparent 2%, #000 20%, #000 80%, transparent 98%);
+      }
+      .pins-tape { --W: 0px; --a: -1; position: absolute; left: 50%; top: 30px; width: var(--W); height: 0; will-change: transform; }
+      .anchor, .pins { position: absolute; pointer-events: none; }
+      .pins { inset: 0; }
       /* место, куда встанет реакция, пока открыта панель */
       .anchor {
-        top: 50%;
+        top: 0;
         width: 16px;
         height: 16px;
         border-radius: 50%;
-        left: calc(16px + var(--a) * (100% - 32px));
+        left: calc(var(--a) * var(--W));
         translate: -50% -50%;
         border: 2px solid var(--hot);
         box-shadow: 0 0 14px var(--hot);
         opacity: 0;
         transition: opacity 0.2s, left 0.2s var(--ease);
       }
-      .track.anchoring .anchor { opacity: 1; }
-      .pins { position: absolute; inset: 0 16px; pointer-events: none; }
+      .tapepins.anchoring .anchor { opacity: 1; }
       .pin {
         position: absolute;
-        bottom: calc(100% + 4px);
-        left: calc(var(--x) * 100%);
-        translate: -50% 0;
+        top: 0;
+        left: calc(var(--x) * var(--W));
+        translate: -50% -50%;
         width: 26px;
         height: 32px;
         border-radius: 999px;
         display: grid;
         place-items: center;
         font-size: 14px;
-        background: radial-gradient(ellipse 80% 50% at 50% 110%, var(--ec), transparent 74%), var(--card);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine), 0 6px 14px -8px var(--ec);
+        --rim-w: 1px;
+        background: radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%), radial-gradient(ellipse 80% 50% at 50% 110%, var(--ec), transparent 74%), var(--lg-fill);
+        box-shadow: inset 1.5px 0 1px -0.5px var(--lg-spec), 0 6px 14px -8px var(--ec), 0 2px 3px -1px var(--lg-contact);
       }
-      .pin.mine { box-shadow: inset 0 0 0 1.5px var(--live), inset 0 1px 0 var(--shine), 0 6px 14px -6px var(--ec); }
+      .pin.mine { box-shadow: inset 0 0 0 1.5px var(--live), inset 1.5px 0 1px -0.5px var(--lg-spec), 0 6px 14px -6px var(--ec); }
       .pin.new { animation: pop 0.55s var(--spring) backwards; }
       .pin.ping { animation: ping 0.6s var(--spring); }
-      .stage.busy .track { display: none; }
+      .stage.busy :is(.reel, .lens, .tapepins) { display: none; }
       .stage.busy .tray { display: none; }
       /* в эфире главную кнопку заменяет микрофон dock'а, сердце и ветка стоят над ним */
-      .bottom.air { bottom: calc(max(18px, env(safe-area-inset-bottom)) + 84px); }
-      .bottom.air .mainwrap { visibility: hidden; }
       .mainwrap { display: grid; justify-items: center; gap: 8px; }
       .main {
         width: 66px;
         height: 66px;
         border-radius: 50%;
-        background: var(--main);
+        /* главная кнопка — стекло, густо тонированное: контраст как у сплошной, блик и кромка как у стекла */
+        background:
+          radial-gradient(70% 130% at -8% 42%, rgba(255, 255, 255, 0.5), transparent 62%),
+          radial-gradient(ellipse 58% 46% at 72% 88%, var(--lg-caustic), transparent 72%),
+          color-mix(in srgb, var(--main) 90%, transparent);
+        box-shadow: var(--lg-depth);
         color: var(--main-ink);
         display: grid;
         place-items: center;
-        transition: scale 0.15s, opacity 0.3s;
+        transition: scale 0.2s var(--spring), opacity 0.3s;
       }
       .main:active { scale: 0.92; }
       .main:disabled { opacity: 0.4; }
@@ -420,8 +662,10 @@
         height: 36px;
         border-radius: 999px;
         justify-self: center;
-        box-shadow: inset 0 0 0 1px var(--edge);
-        background: linear-gradient(to top, var(--dc), transparent calc(45% + var(--g) * 55%)), var(--well);
+        box-shadow: inset 1.5px 0 1px -0.5px var(--lg-spec), inset 0 0 0 0.5px var(--edge), 0 3px 6px -3px var(--lg-shadow);
+        background:
+          radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%),
+          linear-gradient(to top, var(--dc), transparent calc(45% + var(--g) * 55%)), var(--well);
       }
       .mine .dot, .me .dot, .small .dot { --dc: var(--live); }
       .small .dot { width: 11px; height: 20px; }
@@ -446,8 +690,10 @@
         touch-action: pan-y;
         padding: 12px 18px max(22px, env(safe-area-inset-bottom));
         border-radius: 36px 36px 0 0;
-        background: var(--panel);
-        box-shadow: inset 0 1px 0 var(--edge);
+        background: radial-gradient(50% 60% at -6% 10%, var(--lg-gloss), transparent 62%), var(--panel);
+        box-shadow: inset 2px 0 1.5px -1px var(--lg-spec), inset 0 1px 1px -0.5px var(--lg-spec), inset 0 0 0 0.5px var(--edge), 0 -10px 40px -20px var(--lg-shadow);
+        backdrop-filter: blur(30px) saturate(180%);
+        -webkit-backdrop-filter: blur(30px) saturate(180%);
         transform: translateY(105%);
         visibility: hidden;
         transition: transform 0.38s var(--ease), visibility 0s 0.38s;
@@ -478,11 +724,9 @@
         justify-content: center;
         gap: 3px;
         text-align: left;
-        background: var(--card);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
-        transition: scale 0.15s;
+        background: var(--lg-surface);
+        box-shadow: var(--lg-depth);
+        transition: scale 0.2s var(--spring);
       }
       .tile.green { --t1: var(--live); --t2: rgb(60, 190, 255); --t3: rgb(190, 240, 60); }
       .tile.wide { min-height: 104px; }
@@ -503,13 +747,13 @@
           radial-gradient(ellipse 44% 54% at 86% 108%, var(--t3), transparent 72%);
       }
       .tile[aria-pressed="true"]::before, .tile.wide::before, .tile.playing::before { opacity: 1; }
-      .tile[aria-pressed="true"] { box-shadow: inset 0 0 0 1.5px var(--edge-on); }
+      .tile[aria-pressed="true"] { --rim-op: 1; --rim-w: 1.8px; }
       .tile.playing { --g: var(--lv); }
       .tile b { font-size: 16px; font-weight: 400; overflow-wrap: anywhere; }
       .tile span { font-size: 12.5px; font-weight: 300; color: var(--ink-2); line-height: 1.3; }
       .tile .tick { position: absolute; top: 50%; right: 24px; translate: 0 -50%; color: var(--ink); }
       /* вертикальный овал: мои записи, листаются вбок */
-      .vrow { display: flex; gap: 10px; margin: 0 -18px; padding: 2px 18px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x pan-y; }
+      .vrow { display: flex; gap: 10px; margin: -10px -18px -14px; padding: 12px 18px 18px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x pan-y; }
       .vrow::-webkit-scrollbar { display: none; }
       /* своя запись и кнопка удаления под ней (у ответов — справа) */
       .item { flex: none; display: flex; align-items: center; gap: 6px; }
@@ -524,10 +768,11 @@
         display: grid;
         place-items: center;
         color: var(--ink-2);
-        background: var(--glass);
-        transition: color 0.2s, background 0.2s, scale 0.15s;
+        background: var(--lg-surface);
+        box-shadow: var(--lg-depth-s);
+        transition: color 0.2s, background 0.2s, scale 0.2s var(--spring);
       }
-      .del:hover { color: var(--hot); background: var(--glass-on); }
+      .del:hover { color: var(--hot); --lg-fill: var(--lg-fill-on); }
       .del:active { scale: 0.9; }
       .del svg { width: 18px; height: 18px; }
       .tile.tall { flex: none; width: 112px; min-height: 190px; padding: 26px 14px 24px; align-items: center; justify-content: flex-start; gap: 10px; text-align: center; }
@@ -551,13 +796,13 @@
         padding: 12px 24px 12px 20px;
         border-radius: 999px;
         text-align: left;
-        background: var(--card);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine);
-        transition: background 0.2s, scale 0.15s;
+        background: var(--lg-surface);
+        box-shadow: var(--lg-depth);
+        transition: background 0.2s, scale 0.2s var(--spring);
       }
-      .row:hover { background: var(--glass-on); }
+      .row:hover { --lg-fill: var(--lg-fill-on); }
       .row:active { scale: 0.98; }
-      .row.playing { background: var(--glass-on); box-shadow: inset 0 0 0 1.5px var(--edge-on); }
+      .row.playing { --lg-fill: var(--lg-fill-on); --rim-op: 1; --rim-w: 1.8px; }
       .row.playing .dot { --g: var(--lv); }
       .txt { display: grid; gap: 2px; min-width: 0; }
       .txt b { font-size: 14.5px; font-weight: 400; overflow-wrap: anywhere; }
@@ -588,9 +833,12 @@
         inset: 0;
         z-index: 2;
         overflow-y: auto;
+        scrollbar-width: none; /* как на телефоне: полоса прокрутки не ложится поверх стекла */
         touch-action: pan-y;
         padding: max(18px, env(safe-area-inset-top)) 18px 118px;
-        background: var(--page);
+        background:
+          radial-gradient(70% 45% at -14% 40%, var(--side-light), transparent 70%),
+          radial-gradient(130% 50% at 30% 0%, var(--page-hi), var(--page) 70%) var(--page);
         opacity: 0;
         visibility: hidden;
         transition: opacity 0.2s, visibility 0s 0.2s;
@@ -603,8 +851,8 @@
       .stories {
         display: flex;
         gap: 8px;
-        margin: 0 -14px;
-        padding: 6px 14px;
+        margin: -10px -14px -14px;
+        padding: 16px 14px 20px; /* место для тени и ореола: ряд листается вбок и обрезал бы их */
         overflow-x: auto;
         scrollbar-width: none;
         scroll-snap-type: x proximity;
@@ -616,34 +864,44 @@
       .oval {
         --g: 0;
         --dc: var(--hot);
-        width: 128px;
-        height: 78px;
-        padding: 15px 20px;
+        width: 132px;
+        height: 80px;
+        padding: 9px 16px 8px;
         border-radius: 999px;
         display: flex;
-        align-items: flex-start;
-        gap: 6px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
         font-size: 13px;
-        text-align: left;
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine);
+        text-align: center;
+        box-shadow: var(--lg-depth);
         background:
+          radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%),
           radial-gradient(ellipse 30% 26% at 50% 106%, rgba(255, 255, 255, 0.6), transparent 70%),
           radial-gradient(ellipse 58% calc(52% + var(--g) * 46%) at 50% 110%, var(--dc), transparent 72%),
-          var(--card);
-        transition: scale 0.2s var(--ease), box-shadow 0.2s;
+          var(--lg-fill);
+        transition: scale 0.2s var(--spring), box-shadow 0.2s;
       }
-      .oval .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .oval svg { flex: none; width: 17px; height: 17px; }
+      .oval .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .oval > svg { flex: none; width: 17px; height: 17px; }
+      /* на овале — сколько послушали и ответили, ниже — самые частые эмоции */
+      .oval .stats, .oval .emo { display: flex; justify-content: center; gap: 8px; max-width: 100%; font-size: 11px; line-height: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+      .oval .stats > span { display: inline-flex; align-items: center; gap: 3px; }
+      .oval .stats svg { width: 10px; height: 10px; }
+      .oval .emo { gap: 6px; font-size: 11.5px; }
+      .oval .emo b { margin-left: 1px; font-size: 10.5px; font-weight: 400; color: var(--ink); }
+      .st.on .oval .stats { color: var(--ink); }
       .st:nth-child(3n) .oval { --dc: rgb(175, 70, 255); }
       .st:nth-child(3n + 1) .oval { --dc: rgb(255, 150, 40); }
       .st.me .oval, .st.mine .oval { --dc: var(--live); }
       .st.heard { opacity: 0.5; }
       .st.on { color: var(--ink); opacity: 1; }
-      .st.on .oval { --g: var(--lv); box-shadow: inset 0 0 0 1.5px var(--edge-on), inset 0 1px 0 var(--shine); }
+      .st.on .oval { --g: var(--lv); --rim-op: 1; --rim-w: 1.8px; }
       .st:active .oval { scale: 0.95; }
 
       .chan { display: inline-flex; align-items: center; gap: 3px; min-height: 30px; padding: 0 10px; margin-top: 8px; border-radius: 15px; font-size: 12.5px; color: var(--ink-2); }
-      .chan:hover { background: var(--glass); }
+      .chan:hover { background: var(--lg-fill-on); }
       .chan svg { width: 13px; height: 13px; }
       .chan[hidden] { display: none; }
 
@@ -653,18 +911,18 @@
         inset: auto 16px max(18px, env(safe-area-inset-bottom));
         z-index: 3;
         display: flex;
-        gap: 10px;
+        gap: var(--dock-gap);
       }
-      .dock-beam { flex: 1; min-width: 0; border-radius: 32px; }
+      .dock-beam { flex: 1; min-width: 0; border-radius: 32px; box-shadow: var(--lg-outer); }
       .dock-bar {
-        height: 64px;
+        height: var(--dock-h);
         border-radius: 32px;
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        background: var(--dock);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine);
-        backdrop-filter: blur(22px);
-        -webkit-backdrop-filter: blur(22px);
+        background: radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%), var(--dock);
+        box-shadow: var(--lg-inner);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
       }
       .dock-tab {
         position: relative;
@@ -682,15 +940,15 @@
       .dock-tab:focus-visible { outline-offset: -4px; }
       .dock-ico { position: relative; display: block; }
       .dock-ico svg { width: 22px; height: 22px; display: block; }
-      .mic-beam { flex: none; border-radius: 32px; }
+      .mic-beam { flex: none; border-radius: 32px; box-shadow: var(--lg-outer); }
       .dock .main {
-        width: 64px;
-        height: 64px;
-        background: var(--dock);
+        width: var(--dock-h);
+        height: var(--dock-h);
+        background: radial-gradient(70% 130% at -8% 42%, var(--lg-gloss), transparent 62%), var(--dock);
         color: var(--ink);
-        box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--shine);
-        backdrop-filter: blur(22px);
-        -webkit-backdrop-filter: blur(22px);
+        box-shadow: var(--lg-inner);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
       }
       .dock .main svg { position: relative; z-index: 1; }
       /* идёт запись — на экране только она */
@@ -699,7 +957,7 @@
       @media (prefers-reduced-motion: reduce) {
         .small, .main, .pill, .tile, .tile::before, .row, .sheet, .scrim, .page, .dock-tab, .shape, .oval, .st, .tray, .rx, .fxb, .anchor { transition: none; }
         .rx, .rx::before, .rx::after, .rx .e, .tray.open .rx, .pin { animation: none !important; }
-        .halo { animation: none; }
+        .halo, .cap { animation: none; }
       }
     
 </style>
@@ -708,19 +966,55 @@
     <main class="stage" id="stage">
       <div class="glow"></div>
       <div class="shape halo"></div>
+      <div class="reel" id="track" role="slider" tabindex="0" data-i18n-aria="tapePlace" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <canvas id="reel"></canvas>
+      </div>
       <div class="shape ring" style="--k: 0.62"></div>
       <div class="shape ring" style="--k: 0.44"></div>
       <div class="shape ring" style="--k: 0.28"></div>
       <div class="shape ring" style="--k: 0.14"></div>
       <div class="shape cap" id="cap"></div>
+      <div class="shape lens" aria-hidden="true"><canvas id="lensReel"></canvas></div>
+      <div class="tapepins" id="pinsLayer" aria-hidden="true">
+        <div class="pins-tape" id="pinsTape"><i class="anchor"></i><div class="pins" id="pins"></div></div>
+      </div>
 
       <header class="top">
+        <!-- шапка: логотип и название слева, твоя аватарка справа; во время записи — кнопка «назад» -->
         <div class="bar">
-          <button class="small" id="back" aria-label="Назад в эфир" hidden></button>
+          <button class="small" id="back" data-i18n-aria="back" hidden></button>
+          <div class="brand">
+            <!-- знак — только стеклянный овал, без подложки: свет слева, сияние голоса со дна -->
+            <svg class="mark" viewBox="0 0 40 64" width="20" height="32" aria-hidden="true">
+              <defs>
+                <linearGradient id="mk-body" x1="0" x2="1">
+                  <stop offset="0" stop-color="#fff" stop-opacity="0.6" />
+                  <stop offset="0.45" stop-color="#fff" stop-opacity="0.1" />
+                  <stop offset="1" stop-color="#6ee1ff" stop-opacity="0.18" />
+                </linearGradient>
+                <radialGradient id="mk-glow" cx="20" cy="60" r="28" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#ff4678" />
+                  <stop offset="0.55" stop-color="#af46ff" stop-opacity="0.5" />
+                  <stop offset="1" stop-color="#af46ff" stop-opacity="0" />
+                </radialGradient>
+                <linearGradient id="mk-rim" x1="0" x2="1">
+                  <stop offset="0" stop-color="#fff" />
+                  <stop offset="0.35" stop-color="#ffc6e4" />
+                  <stop offset="0.65" stop-color="#d4c4ff" />
+                  <stop offset="1" stop-color="#6ee1ff" />
+                </linearGradient>
+              </defs>
+              <rect x="2" y="2" width="36" height="60" rx="18" fill="url(#mk-body)" />
+              <rect x="2" y="2" width="36" height="60" rx="18" fill="url(#mk-glow)" />
+              <rect x="2.8" y="2.8" width="34.4" height="58.4" rx="17.2" fill="none" stroke="url(#mk-rim)" stroke-width="1.6" />
+            </svg>
+            <span>SUSHHH</span>
+          </div>
+          <button class="small avatar" id="avatar"></button>
         </div>
-        <div class="stories" id="stories" aria-label="Голоса эфира"></div>
+        <div class="stories" id="stories" data-i18n-aria="airVoices"></div>
         <div class="meta">
-          <button class="chan" id="chan" aria-label="Выбрать канал"></button>
+          <button class="chan" id="chan" data-i18n-aria="pickChannel"></button>
           <div class="who" id="who"></div>
           <div class="hook" id="hook"></div>
           <div class="hint" id="hint" aria-live="polite"></div>
@@ -735,21 +1029,14 @@
         </div>
         <div class="side end"><button class="small" id="right"></button><span class="label" id="rightl"></span></div>
       </footer>
-      <div class="fx" id="fx" aria-label="Эффекты"></div>
-      <div class="tray" id="tray" role="group" aria-label="Аудио-реакции"></div>
+      <div class="fx" id="fx" data-i18n-aria="effects"></div>
+      <div class="tray" id="tray" role="group" data-i18n-aria="audioReactions"></div>
 
-      <div class="track" id="track" role="slider" tabindex="0" aria-label="Место в записи" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="wave" id="wave"></div>
-        <div class="wave lit" id="waveLit"></div>
-        <i class="head"></i>
-        <i class="anchor"></i>
-        <div class="pins" id="pins"></div>
-      </div>
       <div class="page" id="page"></div>
-      <nav class="dock" id="dock" aria-label="Разделы"></nav>
+      <nav class="dock" id="dock" data-i18n-aria="sections"></nav>
 
       <div class="scrim" id="scrim"></div>
-      <section class="sheet" id="sheet" aria-label="Лист"></section>
+      <section class="sheet" id="sheet" data-i18n-aria="sheet"></section>
     </main>
     <script type="module" src="./capsule.ts"></script>
   </body>

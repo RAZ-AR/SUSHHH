@@ -2,6 +2,7 @@
 // поверх него. Каналы и ветка выезжают снизу листом. Звук и запись остаются в capsule.ts и приходят через api.
 
 import { CHANNELS, ME, MY_POSTS, POSTS, esc, type Clip, type Post } from "./capsule-data";
+import { tr, trn } from "./i18n";
 
 export type Tab = "air" | "mine";
 export type Target = { kind: "reply"; post: Post } | { kind: "post" };
@@ -175,7 +176,7 @@ function act(a: string, id: string, scope: Scope) {
   } else if (a === "post") api.record({ kind: "post" });
   else if (a === "del") {
     // удаление не отменить — спрашиваем
-    if (!confirm("Удалить запись? Вернуть её не получится.")) return;
+    if (!confirm(tr("confirmDelete"))) return;
     if (now === id) {
       api.stop();
       now = "";
@@ -194,7 +195,7 @@ function act(a: string, id: string, scope: Scope) {
 
 function pickChannel(id: string) {
   channel = id;
-  api.setChannel(CHANNELS.find((c) => c.id === id)!.name);
+  api.setChannel(tr(`ch_${id}`));
 }
 // смахивание вбок в эфире: соседний канал по кругу
 export function stepChannel(dir: 1 | -1) {
@@ -204,21 +205,17 @@ export function stepChannel(dir: 1 | -1) {
 
 // =================== разметка ===================
 
-const plural = (n: number, one: string, few: string, many: string) => {
-  const r = new Intl.PluralRules("ru").select(n);
-  return `${n} ${r === "one" ? one : r === "few" ? few : many}`;
-};
-const replies = (n: number) => plural(n, "ответ", "ответа", "ответов");
+const replies = (n: number) => trn("replies", n);
 
 // записанное на этом телефоне можно удалить — у таких id первая буква «m»
 const deletable = (id: string) => id.startsWith("m");
-const delBtn = (id: string) => `<button class="del" data-act="del" data-id="${id}" aria-label="Удалить запись">${I.trash}</button>`;
+const delBtn = (id: string) => `<button class="del" data-act="del" data-id="${id}" aria-label="${tr("deleteRec")}">${I.trash}</button>`;
 
 // sub — уже готовая разметка (экранированная)
 const row = (c: Clip, sub = esc(c.text)) => {
-  const who = c.mine ? "ты" : esc(c.name);
+  const who = c.mine ? tr("you") : esc(c.name);
   const btn = `<button class="row${c.mine ? " mine" : ""}${now === c.id ? " playing" : ""}" data-act="play" data-id="${c.id}"
-     aria-label="${now === c.id ? "Остановить" : "Слушать"}: ${who}">
+     aria-label="${tr(now === c.id ? "stopName" : "listenTo", { name: who })}">
      <span class="dot"></span>
      <span class="txt"><b>${who}</b><span>${sub}</span></span>
      <span class="ico">${now === c.id ? I.stop : I.play}</span>
@@ -232,13 +229,13 @@ const channelTiles = () =>
     (c, i) =>
       `<button class="tile ${i % 3 === 0 ? "green" : "pink"}" data-act="channel" data-id="${c.id}" aria-pressed="${c.id === channel}">
          ${c.id === channel ? `<span class="tick">${I.check}</span>` : ""}
-         <b>${esc(c.name)}</b><span>${esc(c.note)}</span>
+         <b>${tr(`ch_${c.id}`)}</b><span>${tr(`ch_${c.id}_note`)}</span>
        </button>`,
   ).join("") +
   `</div>`;
 
 const newReplies = () =>
-  unheard ? `<button class="pill hot" data-act="new">${I.play} ${plural(unheard, "новый ответ", "новых ответа", "новых ответов")}</button>` : "";
+  unheard ? `<button class="pill hot" data-act="new">${I.play} ${trn("newReplies", unheard)}</button>` : "";
 
 function drawPage() {
   const page = el("page");
@@ -249,47 +246,47 @@ function drawPage() {
     const sent = myReplies().sort((a, b) => stamp(b.r.id) - stamp(a.r.id));
     const light = api.theme() === "light";
     page.innerHTML =
-      `<div class="me"><span class="dot big"></span><div><b>${esc(ME)}</b><span>твой цвет — зелёный</span></div>
-         <button class="small" data-act="theme" aria-label="${light ? "Тёмная тема" : "Светлая тема"}">${light ? I.moon : I.sun}</button></div>` +
+      `<div class="me"><span class="dot big"></span><div><b>${esc(ME)}</b><span>${tr("myColor")}</span></div>
+         <button class="small" data-act="theme" aria-label="${tr(light ? "darkTheme" : "lightTheme")}">${light ? I.moon : I.sun}</button></div>` +
       // мои записи — вертикальные овалы, листаются вбок; первый начинает новую запись
-      `<h2 class="sec">Мои записи</h2>
+      `<h2 class="sec">${tr("myRecordings")}</h2>
        <div class="vrow">
-         <button class="tile tall add green" data-act="post" aria-label="Записать новый голос">${I.plus}<b>новая запись</b></button>` +
+         <button class="tile tall add green" data-act="post" aria-label="${tr("recordNew")}">${I.plus}<b>${tr("newRecording")}</b></button>` +
       [...MY_POSTS].reverse().map((p) => {
-        const tile = `<button class="tile tall green${now === p.id ? " playing" : ""}" data-act="play" data-id="${p.id}" aria-label="${now === p.id ? "Остановить" : "Слушать"}: ${esc(p.hook)}">
+        const tile = `<button class="tile tall green${now === p.id ? " playing" : ""}" data-act="play" data-id="${p.id}" aria-label="${tr(now === p.id ? "stopName" : "listenTo", { name: esc(p.hook) })}">
              <span class="tick">${now === p.id ? I.stop : I.play}</span><span class="clamp">${esc(p.hook)}</span>
              <span class="count">${p.replies.length ? replies(p.replies.length) : ""}</span>
            </button>`;
         return deletable(p.id) ? `<div class="item t">${tile}${delBtn(p.id)}</div>` : tile;
       }).join("") +
       `</div>
-       <h2 class="sec">Ответы мне</h2>` +
+       <h2 class="sec">${tr("repliesToMe")}</h2>` +
       // ответы — горизонтальные овалы
       newReplies() +
-      (mine.length ? mine.map(({ r, p }) => row(r, `на «${esc(p.hook)}»`)).join("") : `<p class="empty">Тебе пока не ответили.<br />Запиши голос — и его услышат.</p>`) +
+      (mine.length ? mine.map(({ r, p }) => row(r, tr("onHook", { hook: esc(p.hook) }))).join("") : `<p class="empty">${tr("noRepliesToMe")}</p>`) +
       // мои ответы другим: новые сверху
-      `<h2 class="sec">Мои ответы</h2>` +
+      `<h2 class="sec">${tr("myReplies")}</h2>` +
       (sent.length
-        ? sent.map(({ r, p }) => row(r, `для ${esc(p.name)} · «${esc(p.hook)}»`)).join("")
-        : `<p class="empty">Твоих ответов пока нет.<br />Микрофон в эфире — ответ голосу, который звучит.</p>`);
+        ? sent.map(({ r, p }) => row(r, tr("forHook", { name: esc(p.name), hook: esc(p.hook) }))).join("")
+        : `<p class="empty">${tr("noMyReplies")}</p>`);
   }
 }
 
 function drawSheet() {
   const s = el("sheet");
   if (sheetView === "channels") {
-    s.innerHTML = `<div class="grab"></div><div class="sh-title lone">Что слушаем</div>` + channelTiles();
+    s.innerHTML = `<div class="grab"></div><div class="sh-title lone">${tr("whatListening")}</div>` + channelTiles();
   } else if (sheetView === "thread") {
     const n = post.replies.length;
     s.innerHTML =
-      `<div class="sh-head"><button class="small" data-act="close" aria-label="Закрыть">${I.close}</button>
-         <div><div class="sh-title">Ветка</div>${n ? `<div class="sh-sub">${replies(n)}</div>` : ""}</div><span></span></div>
+      `<div class="sh-head"><button class="small" data-act="close" aria-label="${tr("close")}">${I.close}</button>
+         <div><div class="sh-title">${tr("threadTitle")}</div>${n ? `<div class="sh-sub">${replies(n)}</div>` : ""}</div><span></span></div>
        <div class="tiles"><button class="tile pink wide${now === post.id ? " playing" : ""}" data-act="play" data-id="${post.id}">
-         <span class="tick">${now === post.id ? I.stop : I.play}</span><b>${post.mine ? "ты" : esc(post.name)}</b><span>${esc(post.hook)}</span>
+         <span class="tick">${now === post.id ? I.stop : I.play}</span><b>${post.mine ? tr("you") : esc(post.name)}</b><span>${esc(post.hook)}</span>
        </button></div>` +
       (n
-        ? `<button class="pill" data-act="all">${I.play} слушать всё подряд</button>` + post.replies.map((r) => row(r)).join("")
-        : `<p class="empty">Ответов пока нет.<br />Начни разговор — ответь голосом.</p>`) +
-      `<div class="sh-foot"><button class="main" data-act="reply" aria-label="Ответить голосом">${I.mic}</button><div class="label">ответить</div></div>`;
+        ? `<button class="pill" data-act="all">${I.play} ${tr("playAll")}</button>` + post.replies.map((r) => row(r)).join("")
+        : `<p class="empty">${tr("noReplies")}</p>`) +
+      `<div class="sh-foot"><button class="main" data-act="reply" aria-label="${tr("replyVoice")}">${I.mic}</button><div class="label">${tr("replyLabel")}</div></div>`;
   }
 }
