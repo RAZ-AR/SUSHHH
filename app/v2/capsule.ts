@@ -1609,7 +1609,7 @@ $("avatar").setAttribute("aria-label", tr("profile", { name: ME }));
 $("avatar").onclick = () => showTab("mine");
 render();
 // новая версия сайта включается сама, когда ничего не записывается и не звучит (см. fresh.ts)
-keepFresh(() => state !== "air" || playing);
+keepFresh(() => state !== "air" || playing || starting || remote.uploading());
 
 // волна первого голоса видна сразу, ещё до первого касания
 // свои записи с прошлых раз — обратно в эфир и в «Моё»; потом волна текущего голоса
