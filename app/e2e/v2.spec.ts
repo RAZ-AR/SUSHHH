@@ -168,3 +168,24 @@ test("кнопки для экранного диктора листают го�
   await page.keyboard.press("Enter");
   await expect(page.locator("#srPlay")).toHaveText("Слушать");
 });
+
+test("чёткий режим: включается по системной настройке контраста и кнопкой в «Моё»", async ({ page }) => {
+  await page.emulateMedia({ contrast: "more" });
+  await open(page);
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-solid", "");
+  // кнопка в «Моё» выключает вопреки системе и запоминает выбор
+  await page.locator(".dock-tab").nth(1).click();
+  const btn = page.locator('[data-act="solid"]');
+  await expect(btn).toHaveAttribute("aria-pressed", "true");
+  await btn.click();
+  await expect(html).not.toHaveAttribute("data-solid", "");
+  await page.reload();
+  await expect(html).not.toHaveAttribute("data-solid", "");
+  // включили вручную — стекло без размытия
+  await page.emulateMedia({ contrast: "no-preference" });
+  await page.locator(".dock-tab").nth(1).click();
+  await page.locator('[data-act="solid"]').click();
+  await expect(html).toHaveAttribute("data-solid", "");
+  expect(await page.locator(".dock-bar").evaluate((e) => getComputedStyle(e).backdropFilter)).toBe("none");
+});

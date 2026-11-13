@@ -18,6 +18,8 @@ type Api = {
   refresh(): void; // перерисовать эфир и dock
   theme(): "dark" | "light";
   toggleTheme(): void;
+  solid(): boolean; // чёткий режим: без прозрачности, выше контраст
+  toggleSolid(): void;
   remove(id: string): Promise<void>; // удалить свою запись
   // безопасность: голос пропадает из эфира у этого человека сразу
   hide(id: string): void;
@@ -35,6 +37,7 @@ let mod: { id: string; name: string; step: ModStep } | undefined;
 type Scope = "page" | "sheet";
 
 const I = {
+  contrast: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4.5M5 4.5h11l-2 4 2 4H5"/></svg>',
@@ -223,7 +226,10 @@ function act(a: string, id: string, scope: Scope) {
     void api.removeAllMine().then(drawPage);
   } else if (a === "erase") openSheet("erase");
   else if (a === "erase-yes") void eraseAll();
-  else if (a === "theme") {
+  else if (a === "solid") {
+    api.toggleSolid();
+    drawPage();
+  } else if (a === "theme") {
     api.toggleTheme();
     drawPage();
   } else if (a === "channel") {
@@ -324,6 +330,7 @@ function drawPage() {
     const light = api.theme() === "light";
     page.innerHTML =
       `<div class="me"><span class="dot big"></span><div><b>${esc(ME)}</b><span>${tr("myColor")}</span></div>
+         <button class="small" data-act="solid" aria-pressed="${api.solid()}" aria-label="${tr("solidMode")}" title="${tr("solidMode")}">${I.contrast}</button>
          <button class="small" data-act="theme" aria-label="${tr(light ? "darkTheme" : "lightTheme")}">${light ? I.moon : I.sun}</button></div>` +
       // мои записи — вертикальные овалы, листаются вбок; первый начинает новую запись
       `<h2 class="sec">${tr("myRecordings")}</h2>

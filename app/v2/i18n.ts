@@ -139,6 +139,7 @@ const D: Record<string, Row> = {
   nextVoice: ["Next voice", "Следующий голос", "Nächste Stimme", "Voz siguiente", "Voix suivante"],
   playVoice: ["Play", "Слушать", "Abspielen", "Reproducir", "Écouter"],
   pauseVoice: ["Pause", "Пауза", "Pause", "Pausa", "Pause"],
+  solidMode: ["Clear mode: no transparency, higher contrast", "Чёткий режим: без прозрачности, выше контраст", "Klarer Modus: ohne Transparenz, mehr Kontrast", "Modo nítido: sin transparencias, más contraste", "Mode net : sans transparence, contraste renforcé"],
   // каналы
   ch_foryou: ["For you", "Для тебя", "Für dich", "Para ti", "Pour toi"],
   ch_foryou_note: ["picked from what you listen to", "подобрано по тому, что ты слушаешь", "passend zu dem, was du hörst", "elegido según lo que escuchas", "choisi d'après ce que tu écoutes"],

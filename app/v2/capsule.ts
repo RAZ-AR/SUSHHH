@@ -90,6 +90,43 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#f1f1ef" : "#0b0b0c");
 }
 applyTheme();
+
+// Чёткий режим — без прозрачности и с высоким контрастом. Включается сам, если в системе включено
+// «Уменьшить прозрачность» или «Увеличить контраст», или кнопкой в «Моё»: Safari на iPhone не сообщает
+// сайту про прозрачность, поэтому нужна и ручная кнопка. Выбор человека важнее системы
+const SOLID_KEY = "sushhh.v2.solid";
+const solidQuery = matchMedia("(prefers-reduced-transparency: reduce), (prefers-contrast: more)");
+function solidPref(): "on" | "off" | null {
+  try {
+    const v = localStorage.getItem(SOLID_KEY);
+    return v === "on" || v === "off" ? v : null;
+  } catch {
+    return null;
+  }
+}
+const isSolid = () => {
+  const p = solidPref();
+  return p ? p === "on" : solidQuery.matches;
+};
+function applySolid() {
+  document.documentElement.toggleAttribute("data-solid", isSolid());
+}
+applySolid();
+solidQuery.addEventListener("change", () => {
+  applySolid();
+  render();
+});
+function toggleSolid() {
+  try {
+    localStorage.setItem(SOLID_KEY, isSolid() ? "off" : "on");
+  } catch {
+    // не запомнится — но переключится сейчас
+    document.documentElement.toggleAttribute("data-solid");
+    return render();
+  }
+  applySolid();
+  render();
+}
 function toggleTheme() {
   theme = theme === "dark" ? "light" : "dark";
   try {
@@ -1637,6 +1674,8 @@ initScreens({
   refresh: render,
   theme: () => theme,
   toggleTheme,
+  solid: isSolid,
+  toggleSolid,
 });
 
 // Главный экран управляется смахиванием: вверх и вниз — следующий и предыдущий голос, вбок — соседний канал,
