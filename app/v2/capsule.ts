@@ -11,10 +11,12 @@ import { createRoot } from "react-dom/client";
 import { LOBE_SPAN, VoiceBeam } from "voice-glow";
 import { audioCtx } from "../src/audio";
 import { MEMES, REACTIONS, playReaction, type Reaction } from "../src/reactions";
-import { MY_POSTS, ME, POSTS, esc, type Clip, type Post } from "./capsule-data";
+import { ASIDE, MY_POSTS, ME, POSTS, esc, type Clip, type Post } from "./capsule-data";
 import { deleteRec, getRec, loadRecs, pack, saveRec, toBuffer, type Meta, type SaveResult } from "./store";
 import { num, tr, trn, translateDom } from "./i18n";
-import { airFront, clearPlaying, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
+import { t as t1 } from "../src/i18n";
+import { block, report, unblock, hide, visible } from "./safety";
+import { airFront, clearPlaying, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -794,6 +796,7 @@ function say(text: string) {
     notice = "";
     render();
   }, 6000);
+  render(); // показать сразу, а не при следующей перерисовке
 }
 
 // Эффекты для своей записи. Считаются заранее целиком (OfflineAudioContext): то, что слышно
@@ -1187,6 +1190,10 @@ function render() {
   const replying = state !== "air";
   const air = state === "air";
   $("who").textContent = air ? v.name : target.kind === "post" ? tr("newRecording") : tr("replyTo", { name: target.post.name });
+  // «⋯» у чужого голоса: скрыть, пожаловаться, заблокировать
+  const more = $("more");
+  more.hidden = !air || !!v.mine;
+  more.setAttribute("aria-label", `${t1("more")}: ${v.name}`);
   $("chan").innerHTML = `${esc(channelName)} ${ICON.down}`;
   $("chan").hidden = !air;
   $("hook").textContent = replying ? "" : v.hook;
@@ -1300,7 +1307,72 @@ $("stories").onclick = (e) => {
   else if (i !== undefined) void playVoice(Number(i));
 };
 
+// =================== безопасность ===================
+
+// Скрытое, пожалованное и голоса заблокированных авторов убираются из эфира и веток сразу.
+// Убранное помним, чтобы «вернуть» автора без перезагрузки.
+const removed: { clip: Clip; parent?: Post }[] = [];
+function applySafety() {
+  const was = VOICES[voice];
+  const wasPlaying = playing && playingBuf === voiceBuf;
+  for (let i = VOICES.length - 1; i >= 0; i--) {
+    // последний голос не убираем: пустой эфир сломал бы экран; он уйдёт, когда появятся другие
+    if (visible(VOICES[i]) || VOICES.length === 1) continue;
+    removed.push({ clip: VOICES[i] });
+    ASIDE.push(VOICES.splice(i, 1)[0]);
+    if (i < voice) voice--;
+  }
+  for (const p of [...VOICES, ...MY_POSTS])
+    for (let j = p.replies.length - 1; j >= 0; j--)
+      if (!visible(p.replies[j])) removed.push({ clip: p.replies.splice(j, 1)[0], parent: p });
+  voice = Math.max(0, Math.min(voice, VOICES.length - 1));
+  storiesKey = "";
+  if (VOICES[voice] !== was) {
+    // звучавший голос убран — без паузы переходим к следующему
+    silence();
+    voiceBuf = undefined;
+    heldF = 0;
+    if (wasPlaying && state === "air") void playVoice(voice);
+    else showWave();
+  }
+  render();
+}
+function restoreAuthor(name: string) {
+  for (let i = removed.length - 1; i >= 0; i--) {
+    const { clip, parent } = removed[i];
+    if (clip.name !== name || !visible(clip)) continue;
+    if (parent) parent.replies.push(clip);
+    else {
+      VOICES.push(clip as Post);
+      ASIDE.splice(ASIDE.indexOf(clip as Post), 1);
+    }
+    removed.splice(i, 1);
+  }
+  storiesKey = "";
+  render();
+}
+
 initScreens({
+  hide: (id) => {
+    hide(id);
+    applySafety();
+    say(t1("hidden"));
+  },
+  report: (id, reason) => {
+    report(id, reason);
+    applySafety();
+    if (reason !== "crisis") say(t1("reported"));
+  },
+  block: (name) => {
+    block(name);
+    applySafety();
+    say(t1("blocked", { name }));
+  },
+  unblock: (name) => {
+    unblock(name);
+    restoreAuthor(name);
+    say(t1("unblocked", { name }));
+  },
   play: (clip, onEnd, onFail) => void playClip(clip, onEnd, onFail),
   stop: stopAir,
   record: (t) => void startRec(t),
@@ -1455,6 +1527,11 @@ render();
 
 // волна первого голоса видна сразу, ещё до первого касания
 // свои записи с прошлых раз — обратно в эфир и в «Моё»; потом волна текущего голоса
+applySafety(); // скрытое и заблокированное в прошлые разы — сразу не в эфире
+$("more").onclick = () => {
+  const v = VOICES[voice];
+  if (v && !v.mine) openModerate(v.id, v.name);
+};
 void loadRecs()
   .then((recs) => recs.forEach((r) => place(r, { stored: true }))) // звук остаётся на устройстве
   .finally(() => {

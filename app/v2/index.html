@@ -330,6 +330,14 @@
       .grow { flex: 1; }
       .meta { padding: 0 30px; }
       .who { font-size: 16px; font-weight: 400; padding-top: 2px; overflow-wrap: anywhere; }
+      /* имя автора и «⋯» рядом: кнопка маленькая, но касание ловится на 44×44 */
+      .who-row { display: flex; align-items: center; justify-content: center; gap: 2px; }
+      .who-row .who { min-width: 0; }
+      .more { position: relative; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); margin-right: -30px; }
+      .more::before { content: ""; position: absolute; inset: -8px; }
+      .more:hover { color: var(--ink); background: var(--lg-fill-on); }
+      .more[hidden] { display: none; }
+      .more svg { width: 18px; height: 18px; }
       .hook, .hint { font-size: 13.5px; font-weight: 300; color: var(--ink-2); margin-top: 4px; line-height: 1.35; text-wrap: balance; }
       .hint { min-height: 18px; font-variant-numeric: tabular-nums; }
       
@@ -704,6 +712,16 @@
       .sh-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; text-align: center; margin-bottom: 16px; }
       .sh-title { font-size: 15px; }
       .sh-title.lone { text-align: center; margin-bottom: 16px; }
+      .sh-note { margin: -6px 8px 16px; text-align: center; font-size: 13px; font-weight: 300; line-height: 1.45; color: var(--ink-2); text-wrap: pretty; }
+      .tiles + .sh-note { margin: 4px 8px 4px; }
+      /* пункты листа «⋯»: стеклянные овалы с иконкой; блокировка — цветом опасности, помощь — тёплым */
+      .tile.mod { min-height: 58px; padding: 10px 24px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; }
+      .tile.mod .mi svg { display: block; width: 20px; height: 20px; }
+      .tile.mod b { font-size: 15px; }
+      .tile.mod.danger { color: var(--hot); --t1: var(--hot); }
+      .tile.mod.care { --t1: rgb(255, 150, 40); --t2: var(--hot); }
+      .hintline { margin: -4px 4px 10px; font-size: 12.5px; font-weight: 300; color: var(--ink-2); }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; }
       .sh-sub { font-size: 12.5px; font-weight: 300; color: var(--ink-2); margin-top: 2px; }
 
       /* плитка: тёмное стекло, со дна поднимается сияние — тот же приём, что у капсулы */
@@ -1015,7 +1033,7 @@
         <div class="stories" id="stories" data-i18n-aria="airVoices"></div>
         <div class="meta">
           <button class="chan" id="chan" data-i18n-aria="pickChannel"></button>
-          <div class="who" id="who"></div>
+          <div class="who-row"><div class="who" id="who"></div><button class="more" id="more" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg></button></div>
           <div class="hook" id="hook"></div>
           <div class="hint" id="hint" aria-live="polite"></div>
         </div>

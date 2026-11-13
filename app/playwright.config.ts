@@ -6,7 +6,7 @@ const PORT = 4180;
 
 export default defineConfig({
   testDir: "e2e",
-  timeout: 30_000,
+  timeout: 60_000, // первый тест ждёт, пока dev-сервер соберёт страницу
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
