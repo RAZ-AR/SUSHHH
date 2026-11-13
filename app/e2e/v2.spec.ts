@@ -61,3 +61,34 @@ test("свернули приложение во время записи — з�
   });
   await expect(page.locator("#main")).toHaveAttribute("aria-label", "Опубликовать");
 });
+
+test("жалоба убирает голос, блокировка — автора; всё переживает перезагрузку и возвращается из «Моё»", async ({ page }) => {
+  await open(page);
+  const first = (await page.locator("#who").textContent())!;
+
+  // жалоба «автору нужна помощь»: экран с тем, что делать при опасности, голос пропал
+  await page.locator("#more").click();
+  await page.locator('[data-act="mod-report"]').click();
+  await page.locator('[data-act="mod-reason"][data-id="crisis"]').click();
+  await expect(page.locator("#sheet")).toContainText("112");
+  await page.locator('[data-act="mod-done"]').click();
+  await expect(page.locator("#who")).not.toHaveText(first);
+
+  // блокировка автора следующего голоса
+  const second = (await page.locator("#who").textContent())!;
+  await page.locator("#more").click();
+  await page.locator('[data-act="mod-block"]').click();
+  await page.locator('[data-act="mod-block-yes"]').click();
+  await expect(page.locator("#hint")).toContainText(second);
+
+  await page.reload();
+  const names = page.locator("#stories .st .nm");
+  await expect(names).not.toContainText([first]);
+  await expect(names).not.toContainText([second]);
+
+  // вернуть автора из «Моё»
+  await page.locator(".dock-tab").nth(1).click();
+  await page.locator(`[data-act="unblock"][data-id="${second}"]`).click();
+  await page.locator(".dock-tab").nth(0).click();
+  await expect(names.filter({ hasText: second })).toHaveCount(1);
+});

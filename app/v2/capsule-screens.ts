@@ -1,8 +1,10 @@
 // Разделы и листы прототипа. Разделы (эфир и «Моё») переключает dock; эфир — главный экран, «Моё» — страница
 // поверх него. Каналы и ветка выезжают снизу листом. Звук и запись остаются в capsule.ts и приходят через api.
 
-import { CHANNELS, ME, MY_POSTS, POSTS, esc, type Clip, type Post } from "./capsule-data";
+import { ASIDE, CHANNELS, ME, MY_POSTS, POSTS, esc, type Clip, type Post } from "./capsule-data";
 import { tr, trn } from "./i18n";
+import { t } from "../src/i18n"; // тексты жалоб и блокировки — общие со старой версией, уже на 5 языках
+import { REASONS, blockedNames, type ReportReason } from "./safety";
 
 export type Tab = "air" | "mine";
 export type Target = { kind: "reply"; post: Post } | { kind: "post" };
@@ -16,11 +18,24 @@ type Api = {
   theme(): "dark" | "light";
   toggleTheme(): void;
   remove(id: string): Promise<void>; // удалить свою запись
+  // безопасность: голос пропадает из эфира у этого человека сразу
+  hide(id: string): void;
+  block(name: string): void;
+  report(id: string, reason: ReportReason): void;
+  unblock(name: string): void;
 };
-type Sheet = "channels" | "thread";
+type Sheet = "channels" | "thread" | "mod";
+// лист «⋯»: меню → причины жалобы → (если «нужна помощь») экран помощи; или подтверждение блокировки
+type ModStep = "menu" | "reasons" | "crisis" | "block";
+let mod: { id: string; name: string; step: ModStep } | undefined;
 type Scope = "page" | "sheet";
 
 const I = {
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4.5M5 4.5h11l-2 4 2 4H5"/></svg>',
+  hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 6.1A9.7 9.7 0 0 1 12 6c5 0 8.5 4 9.5 6a13 13 0 0 1-2.6 3.4M6.4 7.6C4.4 8.9 3 10.7 2.5 12c1 2 4.5 6 9.5 6a9 9 0 0 0 4-.9M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+  ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
   stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>',
@@ -86,6 +101,7 @@ export function openSheet(v: Sheet, p?: Post) {
   const s = el("sheet");
   s.scrollTop = 0;
   s.classList.toggle("full", v === "thread");
+  s.setAttribute("aria-label", v === "mod" && mod ? mod.name : tr("sheet"));
   s.classList.add("open");
   el("scrim").classList.add("open");
 }
@@ -102,6 +118,21 @@ export function closeSheet(resume = true) {
 }
 
 const redraw = (scope: Scope) => (scope === "sheet" ? drawSheet() : drawPage());
+
+// «⋯» у чужого голоса или ответа: скрыть, пожаловаться, заблокировать автора
+export function openModerate(id: string, name: string) {
+  mod = { id, name, step: "menu" };
+  openSheet("mod");
+}
+const findClip = (id: string): Clip | undefined => {
+  for (const p of [...POSTS, ...ASIDE, ...MY_POSTS]) {
+    if (p.id === id) return p;
+    const r = p.replies.find((x) => x.id === id);
+    if (r) return r;
+  }
+};
+const moreBtn = (c: Clip) =>
+  c.mine ? "" : `<button class="del" data-act="mod" data-id="${c.id}" aria-label="${t("more")}: ${esc(c.name)}">${I.more}</button>`;
 
 // звук оборвался не по касанию (звонок, Siri) — строка больше не показывает «играет»
 export function clearPlaying() {
@@ -135,7 +166,7 @@ function playFrom(list: Clip[], i: number, scope: Scope) {
 // что играть подряд: в ветке — исходный голос и ответы; в «Моём» — тот ряд, в котором нажали
 // мои ответы другим людям — из всех веток
 const myReplies = () =>
-  POSTS.filter((p) => !p.mine).flatMap((p) => p.replies.filter((r) => r.mine).map((r) => ({ r, p })));
+  [...POSTS, ...ASIDE].filter((p) => !p.mine).flatMap((p) => p.replies.filter((r) => r.mine).map((r) => ({ r, p })));
 
 function listFor(scope: Scope, id = ""): Clip[] {
   if (scope === "sheet") return sheetView === "thread" ? [post, ...post.replies] : [];
@@ -147,6 +178,14 @@ function listFor(scope: Scope, id = ""): Clip[] {
 
 function act(a: string, id: string, scope: Scope) {
   if (a === "close") closeSheet();
+  else if (a === "mod") {
+    const c = findClip(id);
+    if (c) openModerate(c.id, c.name);
+  } else if (a.startsWith("mod-") && mod) moderate(a, id);
+  else if (a === "unblock") {
+    api.unblock(id);
+    drawPage();
+  }
   else if (a === "theme") {
     api.toggleTheme();
     drawPage();
@@ -220,7 +259,8 @@ const row = (c: Clip, sub = esc(c.text)) => {
      <span class="txt"><b>${who}</b><span>${sub}</span></span>
      <span class="ico">${now === c.id ? I.stop : I.play}</span>
    </button>`;
-  return deletable(c.id) ? `<div class="item r">${btn}${delBtn(c.id)}</div>` : btn;
+  if (deletable(c.id)) return `<div class="item r">${btn}${delBtn(c.id)}</div>`;
+  return c.mine ? btn : `<div class="item r">${btn}${moreBtn(c)}</div>`;
 };
 
 const channelTiles = () =>
@@ -268,22 +308,85 @@ function drawPage() {
       `<h2 class="sec">${tr("myReplies")}</h2>` +
       (sent.length
         ? sent.map(({ r, p }) => row(r, tr("forHook", { name: esc(p.name), hook: esc(p.hook) }))).join("")
-        : `<p class="empty">${tr("noMyReplies")}</p>`);
+        : `<p class="empty">${tr("noMyReplies")}</p>`) +
+      // заблокированные: вернуть одним касанием
+      (blockedNames().length
+        ? `<h2 class="sec">${t("blockedN", { n: blockedNames().length })}</h2><p class="hintline">${t("unblockHint")}</p><div class="chips">` +
+          blockedNames()
+            .map((n) => `<button class="pill" data-act="unblock" data-id="${esc(n)}" aria-label="${t("unblock")}: ${esc(n)}">${I.ban} ${esc(n)}</button>`)
+            .join("") +
+          `</div>`
+        : "");
   }
+}
+
+// действия листа «⋯»
+function moderate(a: string, arg: string) {
+  const m = mod!;
+  if (a === "mod-hide") {
+    closeSheet();
+    api.hide(m.id);
+  } else if (a === "mod-report") {
+    m.step = "reasons";
+    drawSheet();
+  } else if (a === "mod-reason") {
+    api.report(m.id, arg as ReportReason);
+    // «автору нужна помощь» — не просто «спасибо»: что делать, если опасность прямо сейчас
+    if (arg === "crisis") {
+      m.step = "crisis";
+      drawSheet();
+    } else closeSheet();
+  } else if (a === "mod-block") {
+    m.step = "block";
+    drawSheet();
+  } else if (a === "mod-block-yes") {
+    closeSheet();
+    api.block(m.name);
+  } else if (a === "mod-done") closeSheet();
+}
+
+const modTile = (act: string, icon: string, label: string, extra = "", arg = "") =>
+  `<button class="tile mod${extra}" data-act="${act}"${arg ? ` data-id="${arg}"` : ""}><span class="mi">${icon}</span><b>${label}</b></button>`;
+
+function drawMod(s: HTMLElement) {
+  const m = mod!;
+  const name = esc(m.name);
+  const head = (title: string, sub = "") =>
+    `<div class="grab"></div><div class="sh-title lone">${title}</div>${sub ? `<p class="sh-note">${sub}</p>` : ""}`;
+  if (m.step === "menu")
+    s.innerHTML =
+      head(name) +
+      `<div class="tiles">` +
+      modTile("mod-report", I.flag, t("report")) +
+      modTile("mod-hide", I.hide, t("hide")) +
+      modTile("mod-block", I.ban, t("blockNamed", { name }), " danger") +
+      `</div>`;
+  else if (m.step === "reasons")
+    s.innerHTML =
+      head(t("reportTitle")) +
+      `<div class="tiles">` +
+      REASONS.map((r) => modTile("mod-reason", r === "crisis" ? I.heart : I.flag, t(`reason.${r}`), r === "crisis" ? " care" : "", r)).join("") +
+      `</div><p class="sh-note">${t("reportNote")}</p>`;
+  else if (m.step === "crisis")
+    s.innerHTML = head(t("thanks"), t("crisisNote")) + `<div class="tiles">${modTile("mod-done", I.heart, t("gotIt"), " care")}</div>`;
+  else
+    s.innerHTML =
+      head(t("blockTitle", { name }), t("blockSub")) + `<div class="tiles">${modTile("mod-block-yes", I.ban, t("block"), " danger")}</div>`;
 }
 
 function drawSheet() {
   const s = el("sheet");
-  if (sheetView === "channels") {
+  if (sheetView === "mod") drawMod(s);
+  else if (sheetView === "channels") {
     s.innerHTML = `<div class="grab"></div><div class="sh-title lone">${tr("whatListening")}</div>` + channelTiles();
   } else if (sheetView === "thread") {
     const n = post.replies.length;
     s.innerHTML =
       `<div class="sh-head"><button class="small" data-act="close" aria-label="${tr("close")}">${I.close}</button>
          <div><div class="sh-title">${tr("threadTitle")}</div>${n ? `<div class="sh-sub">${replies(n)}</div>` : ""}</div><span></span></div>
-       <div class="tiles"><button class="tile pink wide${now === post.id ? " playing" : ""}" data-act="play" data-id="${post.id}">
+       <div class="tiles"><div class="item r"><button class="tile pink wide${now === post.id ? " playing" : ""}" data-act="play" data-id="${post.id}">
          <span class="tick">${now === post.id ? I.stop : I.play}</span><b>${post.mine ? tr("you") : esc(post.name)}</b><span>${esc(post.hook)}</span>
-       </button></div>` +
+       </button>${moreBtn(post)}</div></div>` +
       (n
         ? `<button class="pill" data-act="all">${I.play} ${tr("playAll")}</button>` + post.replies.map((r) => row(r)).join("")
         : `<p class="empty">${tr("noReplies")}</p>`) +
