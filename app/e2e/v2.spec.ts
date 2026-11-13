@@ -32,6 +32,10 @@ test("запись: записать → опубликовать → после
 
   await page.reload();
   await expect(mine).toHaveCount(before + 1);
+  // звук сохранённой записи читается с устройства, только когда она заиграет
+  await mine.first().click();
+  await expect(page.locator("#hint")).toHaveText("");
+  await expect(page.locator("#wave i")).toHaveCount(56);
 });
 
 test("сбой сети не глушит эфир: после ошибки касание пробует снова", async ({ page }) => {

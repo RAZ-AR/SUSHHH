@@ -12,8 +12,8 @@ import { LOBE_SPAN, VoiceBeam } from "voice-glow";
 import { audioCtx } from "../src/audio";
 import { MEMES, REACTIONS, playReaction, type Reaction } from "../src/reactions";
 import { MY_POSTS, ME, POSTS, esc, type Clip, type Post } from "./capsule-data";
-import { deleteRec, loadRecs, pack, saveRec, toBuffer, type Meta, type SaveResult } from "./store";
-import { airFront, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
+import { deleteRec, getRec, loadRecs, pack, saveRec, toBuffer, type Meta, type SaveResult } from "./store";
+import { airFront, clearPlaying, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -248,7 +248,10 @@ function onCtxState() {
     silence();
     paused = true;
     say("Звук прервался — коснись, чтобы продолжить");
-  } else if (playing) silence();
+  } else if (playing) {
+    silence();
+    clearPlaying(); // запись в листе или в «Моё» больше не «играет»
+  }
   render();
 }
 
@@ -271,19 +274,36 @@ function cached(key: string, make: () => Promise<AudioBuffer>) {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-// сеть моргнула или сервер ответил ошибкой — ещё две попытки с паузой
+// обещание, которое не ответило за ms, считается неудачным — иначе зависшая загрузка не дала бы повторить
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer = 0;
+  return Promise.race([p, new Promise<never>((_, reject) => (timer = window.setTimeout(() => reject(new Error("timeout")), ms)))]).finally(() =>
+    clearTimeout(timer),
+  );
+}
+const LOAD_MS = 15_000; // голос — до 1 МБ: столько хватает и на медленной сети
+const DECODE_MS = 10_000;
+// ответы, при которых повтор не поможет: файла нет или доступа к нему нет. 408 и 429 — временные, повторяем
+const FINAL = new Set([400, 401, 403, 404, 410]);
+// сеть моргнула, зависла или сервер ответил ошибкой — ещё две попытки с паузой
 async function fetchBuf(file: string): Promise<AudioBuffer> {
   let err: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt) await sleep(700 * attempt);
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), LOAD_MS);
     try {
-      const r = await fetch(`${import.meta.env.BASE_URL}seed/${file}.m4a`);
-      if (r.status >= 400 && r.status < 500) throw Object.assign(new Error(`HTTP ${r.status}`), { final: true });
+      const r = await fetch(`${import.meta.env.BASE_URL}seed/${file}.m4a`, { signal: ac.signal });
+      if (FINAL.has(r.status)) throw Object.assign(new Error(`HTTP ${r.status}`), { final: true });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return await audio().decodeAudioData(await r.arrayBuffer());
+      const data = await r.arrayBuffer();
+      clearTimeout(timer);
+      return await within(audio().decodeAudioData(data), DECODE_MS);
     } catch (e) {
       err = e;
       if ((e as { final?: boolean }).final) break; // файла нет — повтор не поможет
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw err;
@@ -292,9 +312,13 @@ async function fetchBuf(file: string): Promise<AudioBuffer> {
 // звук записи: свежая (только что записанная), сохранённая на устройстве или демо-файл
 function clipBuf(c: Clip): Promise<AudioBuffer> {
   if (c.buf) return Promise.resolve(c.buf);
-  if (c.rec) {
-    const rec = c.rec;
-    return cached(`rec:${c.id}`, async () => toBuffer(rec));
+  if (c.stored) {
+    const id = c.id;
+    return cached(`rec:${id}`, async () => {
+      const rec = await getRec(id);
+      if (!rec) throw new Error("no recording");
+      return toBuffer(rec);
+    });
   }
   if (c.file) {
     const file = c.file;
@@ -302,7 +326,7 @@ function clipBuf(c: Clip): Promise<AudioBuffer> {
   }
   return Promise.reject(new Error("no audio"));
 }
-const hasAudio = (c: Clip) => !!(c.buf || c.rec || c.file);
+const hasAudio = (c: Clip) => !!(c.buf || c.stored || c.file);
 
 let src: AudioBufferSourceNode | undefined;
 function silence() {
@@ -754,20 +778,31 @@ async function beginRec(t: Target) {
     return;
   }
   await c.resume().catch(() => {}); // iOS приостанавливает звук, пока включается микрофон
+  const tapped = await loadTap(c);
+  // пока спрашивали микрофон и готовили звук, приложение могли свернуть или микрофон отключиться —
+  // тогда не начинаем: иначе микрофон писал бы в фоне
+  if (document.visibilityState === "hidden" || mic.getAudioTracks().some((tr) => tr.readyState === "ended")) {
+    mic.getTracks().forEach((tr) => tr.stop());
+    mic = undefined;
+    session("playback");
+    render();
+    return;
+  }
   try {
     analyser.disconnect();
   } catch {
     // ещё не подключён
   }
-  // микрофон отобрали (звонок, другое приложение) или он отключился — останавливаемся, записанное остаётся
-  for (const tr of mic.getAudioTracks()) tr.onended = tr.onmute = () => micLost();
+  // микрофон отключился совсем — останавливаемся, записанное остаётся. Кратковременное «mute» запись
+  // не прерывает: в это время пишется тишина, а звонок и Siri ловит onCtxState
+  for (const tr of mic.getAudioTracks()) tr.onended = () => micLost();
   micNode = c.createMediaStreamSource(mic);
   micNode.connect(analyser);
   pcm = [];
   sink = c.createGain();
   sink.gain.value = 0;
   sink.connect(c.destination);
-  if (await loadTap(c)) {
+  if (tapped) {
     const node = new AudioWorkletNode(c, "tap", { channelCount: 1, channelCountMode: "explicit" });
     node.port.onmessage = (e) => state === "rec" && pcm.push(e.data as Float32Array);
     tap = node;
@@ -803,7 +838,7 @@ function stopRec(cancel = false) {
   if (state !== "rec") return;
   clearTimeout(recTimer);
   recLen = Math.min(maxRec(), (performance.now() - recStart) / 1000);
-  for (const tr of mic?.getAudioTracks() ?? []) tr.onended = tr.onmute = null;
+  for (const tr of mic?.getAudioTracks() ?? []) tr.onended = null;
   micNode?.disconnect();
   tap?.disconnect();
   sink?.disconnect();
@@ -818,7 +853,11 @@ function stopRec(cancel = false) {
     return;
   }
   const c = audio();
-  const total = chunks.reduce((n, a) => n + a.length, 0);
+  // таймер лимита мог сработать с опозданием — лишнее обрезаем, запись не длиннее 30/15 с
+  const total = Math.min(
+    chunks.reduce((n, a) => n + a.length, 0),
+    Math.round(maxRec() * c.sampleRate),
+  );
   let peak = 0;
   for (const a of chunks) for (let i = 0; i < a.length; i += 8) peak = Math.max(peak, Math.abs(a[i]));
   if (total < c.sampleRate * 0.3 || peak < 1e-4) {
@@ -832,8 +871,10 @@ function stopRec(cancel = false) {
   const ch = buf.getChannelData(0);
   let o = 0;
   for (const a of chunks) {
-    ch.set(a, o);
-    o += a.length;
+    if (o >= total) break;
+    const part = a.length > total - o ? a.subarray(0, total - o) : a;
+    ch.set(part, o);
+    o += part.length;
   }
   take = buf;
   recLen = buf.duration;
@@ -842,8 +883,9 @@ function stopRec(cancel = false) {
 }
 
 // записанное — на своё место: пост — в «Моё» и первым в эфир, ответ — в ветку голоса и в «Моё»
-// sound — свежая запись (buf) или сохранённая на устройстве (rec): её звук расшифруется, только когда заиграет
-function place(rec: Meta, sound: Pick<Clip, "buf" | "rec">) {
+// sound — сохранённая на устройстве (stored: в памяти не держится, расшифруется при игре)
+// или несохранённая (buf: держим в памяти, иначе она пропала бы)
+function place(rec: Meta, sound: Pick<Clip, "buf" | "stored">) {
   if (rec.kind === "post") {
     if (MY_POSTS.some((p) => p.id === rec.id)) return;
     const post: Post = { id: rec.id, name: ME, mine: true, ...sound, hook: rec.title, text: "", replies: [] };
@@ -876,8 +918,12 @@ function send() {
     (): SaveResult => "fail",
   );
   setTimeout(async () => {
-    place(rec, { buf });
     saved = await stored;
+    if (saved === "ok") {
+      // сохранено — звук в общей очереди памяти: отсюда он вытеснится, как остальные, и прочитается с устройства
+      void cached(`rec:${rec.id}`, () => Promise.resolve(buf));
+      place(rec, { stored: true });
+    } else place(rec, { buf });
     state = "sent";
     render();
     setTimeout(() => {
@@ -896,6 +942,14 @@ function backToAir() {
 
 // удалить свою запись: из эфира, «Моё», веток и с устройства
 async function removeRec(id: string) {
+  // у своего поста могли быть и свои ответы — без поста их не найти, поэтому удаляем и их
+  const own = [...VOICES, ...MY_POSTS].find((p) => p.id === id);
+  const orphans = own?.replies.filter((r) => r.mine && (r.stored || r.buf)).map((r) => r.id) ?? [];
+  for (const rid of orphans) {
+    buffers.delete(`rec:${rid}`);
+    marks.delete(rid);
+    await deleteRec(rid);
+  }
   const pi = VOICES.findIndex((p) => p.id === id);
   if (pi >= 0) {
     if (pi === voice) {
@@ -1247,7 +1301,7 @@ render();
 // волна первого голоса видна сразу, ещё до первого касания
 // свои записи с прошлых раз — обратно в эфир и в «Моё»; потом волна текущего голоса
 void loadRecs()
-  .then((recs) => recs.forEach((r) => place(r, { rec: r })))
+  .then((recs) => recs.forEach((r) => place(r, { stored: true }))) // звук остаётся на устройстве
   .finally(() => {
     showWave();
     render();

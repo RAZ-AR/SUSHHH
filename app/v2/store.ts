@@ -88,6 +88,17 @@ export async function deleteRec(id: string) {
   });
 }
 
+// одна запись целиком — когда её играют
+export async function getRec(id: string): Promise<Saved | undefined> {
+  const d = await open();
+  if (!d) return undefined;
+  return new Promise((resolve) => {
+    const req = d.transaction(STORE).objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result as Saved | undefined);
+    req.onerror = () => resolve(undefined);
+  });
+}
+
 export async function loadRecs(): Promise<Saved[]> {
   const d = await open();
   if (!d) return [];
