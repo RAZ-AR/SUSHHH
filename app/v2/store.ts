@@ -52,15 +52,30 @@ function open() {
   return db;
 }
 
-export async function saveRec(rec: Saved) {
+// "ok" — сохранено; "full" — на устройстве кончилось место; "fail" — хранилище недоступно (приватный режим) или сбой
+export type SaveResult = "ok" | "full" | "fail";
+const isFull = (e: unknown) => (e as DOMException | null)?.name === "QuotaExceededError";
+
+let persisted = false;
+export async function saveRec(rec: Saved): Promise<SaveResult> {
   const d = await open();
-  if (!d) return false;
-  return new Promise<boolean>((resolve) => {
-    const tx = d.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(rec);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = tx.onabort = () => resolve(false);
+  if (!d) return "fail";
+  const res = await new Promise<SaveResult>((resolve) => {
+    try {
+      const tx = d.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(rec);
+      tx.oncomplete = () => resolve("ok");
+      tx.onerror = tx.onabort = () => resolve(isFull(tx.error) ? "full" : "fail");
+    } catch (e) {
+      resolve(isFull(e) ? "full" : "fail");
+    }
   });
+  // первая сохранённая запись: просим браузер не стирать хранилище сам (Safari чистит неиспользуемые сайты)
+  if (res === "ok" && !persisted) {
+    persisted = true;
+    void navigator.storage?.persist?.().catch(() => {});
+  }
+  return res;
 }
 
 export async function deleteRec(id: string) {

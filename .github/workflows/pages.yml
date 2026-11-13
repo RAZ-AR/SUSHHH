@@ -33,7 +33,11 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm test
+      # сквозные тесты v2 в настоящем Chromium с поддельным микрофоном
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
       - run: npm run build
         env:
           BASE: /${{ github.event.repository.name }}/
