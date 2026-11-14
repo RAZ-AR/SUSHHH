@@ -163,7 +163,7 @@ const D: Record<string, Row> = {
   joinPrivate: ["On air you stay {name} — nobody sees your email.", "В эфире ты остаёшься {name} — почту никто не увидит.", "Im Live bleibst du {name} — niemand sieht deine E-Mail.", "En directo sigues siendo {name}: nadie ve tu correo.", "En direct tu restes {name} — personne ne voit ton e-mail."],
   joinEmailLabel: ["Email", "Почта", "E-Mail", "Correo", "E-mail"],
   joinSend: ["Get a code", "Получить код", "Code erhalten", "Recibir código", "Recevoir un code"],
-  joinSent: ["We sent a 6-digit code to {email}.", "Мы отправили 6-значный код на {email}.", "Wir haben einen 6-stelligen Code an {email} geschickt.", "Enviamos un código de 6 dígitos a {email}.", "Nous avons envoyé un code à 6 chiffres à {email}."],
+  joinSent: ["We sent a code to {email}.", "Мы отправили код на {email}.", "Wir haben einen Code an {email} geschickt.", "Enviamos un código a {email}.", "Nous avons envoyé un code à {email}."],
   joinCodeLabel: ["Code from the email", "Код из письма", "Code aus der E-Mail", "Código del correo", "Code de l'e-mail"],
   joinConfirm: ["Confirm", "Подтвердить", "Bestätigen", "Confirmar", "Confirmer"],
   joinBusy: ["One moment…", "Секунду…", "Einen Moment…", "Un momento…", "Un instant…"],

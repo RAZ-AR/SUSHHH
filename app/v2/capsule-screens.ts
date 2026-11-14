@@ -181,6 +181,7 @@ async function joinStep() {
     if ((j.step as string) === "code") setTimeout(() => (el("joinCode") as HTMLInputElement | null)?.focus(), 50);
   } else {
     const code = (el("joinCode") as HTMLInputElement).value.replace(/\D/g, "");
+    // длина кода задаётся в Supabase («Email OTP length», сейчас 8) — поле принимает 6–10 цифр
     if (code.length < 6) return void ((j.error = tr("joinErrCode")), drawSheet());
     j.busy = true;
     drawSheet();
@@ -556,7 +557,7 @@ function drawSheet() {
       (j.step === "email"
         ? `<label class="field"><span>${tr("joinEmailLabel")}</span><input id="joinEmail" type="email" inputmode="email" autocomplete="email" value="${esc(j.email)}" placeholder="name@example.com" /></label>`
         : `<p class="sh-note">${tr("joinSent", { email: esc(j.email) })}</p>
-           <label class="field"><span>${tr("joinCodeLabel")}</span><input id="joinCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="000000" /></label>`) +
+           <label class="field"><span>${tr("joinCodeLabel")}</span><input id="joinCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]*" placeholder="••••••••" /></label>`) +
       (j.error ? `<p class="field-err" role="alert">${j.error}</p>` : "") +
       `<div class="tiles"><button class="tile mod care" data-act="join-next"${j.busy ? " disabled" : ""}><span class="mi">${j.step === "email" ? I.mic : I.check}</span><b>${tr(j.busy ? "joinBusy" : j.step === "email" ? "joinSend" : "joinConfirm")}</b></button></div>` +
       (j.step === "code" ? `<div class="chips center"><button class="pill" data-act="join-back">${tr("joinOther")}</button></div>` : "");
