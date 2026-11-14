@@ -47,6 +47,8 @@ const D: Record<string, Row> = {
   stopPlayBtn: ["Stop", "Остановить", "Stoppen", "Parar", "Arrêter"],
   listenBtn: ["Listen", "Послушать", "Anhören", "Escuchar", "Écouter"],
   listen: ["listen", "послушать", "anhören", "escuchar", "écouter"],
+  nameVoice: ["Name your voice (optional)", "Назови голос (необязательно)", "Gib deiner Stimme einen Titel (optional)", "Ponle título a tu voz (opcional)", "Donne un titre à ta voix (facultatif)"],
+  nameReply: ["Caption for the reply (optional)", "Подпись к ответу (необязательно)", "Titel für die Antwort (optional)", "Título de la respuesta (opcional)", "Titre de la réponse (facultatif)"],
   onlyYou: ["{dur} · only you can hear it so far", "{dur} · пока слышно только тебе", "{dur} · bisher hörst nur du das", "{dur} · por ahora solo lo oyes tú", "{dur} · pour l'instant, toi seul l'entends"],
   flying: ["sending…", "летит…", "fliegt…", "enviando…", "envoi…"],
   onAir: ["on air", "в эфире", "im Live", "en directo", "en direct"],

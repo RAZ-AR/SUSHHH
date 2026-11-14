@@ -108,7 +108,7 @@ async function send(meta: Meta, buf: AudioBuffer) {
 async function upload(meta: Meta, buf: AudioBuffer) {
   const blob = await encode(buf);
   return publish(
-    { id: meta.id, blob, replyTo: meta.kind === "reply" ? meta.to : undefined, text: meta.title, env: envOf(buf), palette: 0, tags: [langTag()] }, // язык голоса — язык интерфейса автора
+    { id: meta.id, blob, replyTo: meta.kind === "reply" ? meta.to : undefined, text: meta.caption, env: envOf(buf), palette: 0, tags: [langTag()] }, // язык голоса — язык интерфейса автора
     myName,
   );
 }
