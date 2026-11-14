@@ -233,3 +233,25 @@ test("корень сайта ведёт на овал и не теряет ?…
   await expect(page).toHaveURL(/\/v2\/\?from=old#x$/);
   await expect(page.locator("#cap")).toBeVisible();
 });
+
+// iPhone, приложение с экрана «Домой»: окно короче экрана на статус-бар (873 из 932). Овал тянется
+// на весь экран — и страница вокруг него не должна обрезать низ с доком
+test.describe("с экрана «Домой» на iPhone", () => {
+  test.use({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    viewport: { width: 430, height: 873 },
+    screen: { width: 430, height: 932 },
+  });
+  test("экран не обрезан снизу: док целиком внутри страницы", async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
+    await open(page);
+    const box = await page.evaluate(() => {
+      const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+      return { body: r("body").height, stage: r("#stage").height, dock: r(".dock").bottom };
+    });
+    expect(box.stage).toBe(932);
+    expect(box.body).toBe(932);
+    expect(box.dock).toBeLessThanOrEqual(932);
+    expect(box.dock).toBeGreaterThan(873); // док прижат к низу экрана, а не к низу окна
+  });
+});
