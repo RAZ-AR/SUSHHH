@@ -2,7 +2,7 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-const LIGHT = "#E9E9E6";
+const DARK = "#0b0b0c";
 // GitHub Pages отдаёт сайт из подпапки /SUSHHH/: BASE=/SUSHHH/ npm run build
 const base = process.env.BASE ?? "/";
 
@@ -11,7 +11,7 @@ const base = process.env.BASE ?? "/";
 // Голоса и шрифты — CacheFirst по мере прослушивания; аудио отдаётся с поддержкой Range.
 const pwa = VitePWA({
   registerType: "prompt", // новая версия — только с согласия, чтобы не оборвать запись
-  injectRegister: false, // регистрирует src/pwa.ts
+  injectRegister: false, // регистрирует v2/fresh.ts
   includeAssets: ["favicon.ico", "apple-touch-icon-180x180.png", "logo.svg"],
   manifest: {
     id: base,
@@ -23,8 +23,8 @@ const pwa = VitePWA({
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     orientation: "portrait",
-    theme_color: LIGHT,
-    background_color: LIGHT,
+    theme_color: DARK,
+    background_color: DARK,
     categories: ["social", "music", "entertainment"],
     icons: [
       { src: "pwa-64x64.png", sizes: "64x64", type: "image/png" },
@@ -32,25 +32,24 @@ const pwa = VitePWA({
       { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
       { src: "maskable-icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
-    // долгое нажатие на иконку (Android, десктоп)
-    shortcuts: [
-      { name: "Record", short_name: "Record", url: `${base}?go=record`, icons: [{ src: "pwa-192x192.png", sizes: "192x192" }] },
-      { name: "Replies", short_name: "Replies", url: `${base}?go=replies`, icons: [{ src: "pwa-192x192.png", sizes: "192x192" }] },
-    ],
   },
   workbox: {
     // + демо-голоса (≈1 МБ) и основные начертания шрифта: эфир играет даже в первый офлайн-запуск
-    globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/{inter-tight,jetbrains-mono}-{latin,cyrillic}-*-normal-*.woff2"],
+    globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/inter-tight-{latin,cyrillic}-*-normal-*.woff2"],
     navigateFallback: `${base}index.html`,
-    navigateFallbackDenylist: [/\/v2\//], // новая версия — своя страница, не старое приложение
-    // страницу v2 не кэшируем: старое приложение обновляется только с согласия, и v2 застревала бы
-    // в старой версии. Её скрипты с хэшем в имени кэшируются как обычно
+    navigateFallbackDenylist: [/\/v2\//], // приложение — своя страница; корень только ведёт на неё
+    // страница v2 хранится вместе со своими скриптами: приложение открывается и без сети.
+    // Новую версию v2 включает сама (v2/fresh.ts), поэтому в старой она не застрянет.
+    // Ссылки с ?… (?thread= из уведомления) — та же страница: параметры при поиске в кэше не важны
+    ignoreURLParametersMatching: [/.*/],
     // сжатие голоса (Mediabunny, ≈1,7 МБ с запасным AAC) нужно только при отправке и только с сетью —
     // не качаем его при установке приложения
-    globIgnores: ["**/node_modules/**/*", "v2/**", "assets/mediabunny*"],
+    globIgnores: ["**/node_modules/**/*", "assets/mediabunny*"],
     cleanupOutdatedCaches: true,
     // уведомления «Тебе ответили голосом»: показ и касание (public/push-sw.js)
-    importScripts: ["push-sw.js"],
+    // и включение новой версии, когда открыта только удалённая старая (public/sw-update.js)
+    // и демо-голоса из кэша кусками — иначе Safari на iPhone их не играет (public/sw-media.js)
+    importScripts: ["push-sw.js", "sw-update.js", "sw-media.js"],
     runtimeCaching: [
       {
         urlPattern: ({ url, request }) => request.destination === "audio" || /\.(m4a|mp3|ogg|opus|webm|aac)$/.test(url.pathname),
@@ -87,7 +86,7 @@ const v2Manifest: Plugin = {
 };
 
 // `npm run dev:phone` — HTTPS в локальной сети: без него телефон не даст доступ к микрофону
-// Две версии рядом: старая — в корне сайта, новая «капсула» — по адресу /v2/
+// Приложение — «капсула» по адресу /v2/; корень сайта ведёт туда (старая версия удалена)
 export default defineConfig(({ mode }) => ({
   base,
   plugins: [pwa, v2Manifest, ...(mode === "phone" ? [basicSsl()] : [])],

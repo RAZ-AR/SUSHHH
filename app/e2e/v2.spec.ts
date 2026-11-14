@@ -206,6 +206,57 @@ test("языки голосов: выбираются в листе канало
   expect(await page.evaluate(() => localStorage.getItem("sushhh.v2.langs"))).toBe('["en"]');
 });
 
+test("название голоса: пишется перед публикацией и видно в эфире после перезагрузки", async ({ page }) => {
+  await open(page);
+  const name = page.locator("#name");
+  await expect(name).toBeHidden(); // в эфире поля нет
+
+  await page.locator("#stories .st.me").click();
+  await page.waitForTimeout(1200);
+  await page.locator("#main").click();
+  await expect(name).toBeVisible();
+  await expect(name).toHaveAttribute("placeholder", "Назови голос (необязательно)");
+  await name.fill("  про   утро и кофе  ");
+  await name.press("Enter"); // «Готово» прячет клавиатуру и ничего не публикует
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Опубликовать");
+
+  await page.locator("#main").click();
+  await expect(page.locator("#hint")).toContainText("Сохранено", { timeout: 5000 });
+  await expect(name).toBeHidden();
+
+  await page.reload();
+  await page.locator("#stories .st.mine").first().click();
+  await expect(page.locator("#hook")).toHaveText("про утро и кофе");
+});
+
+test("корень сайта ведёт на овал и не теряет ?… из ссылки", async ({ page }) => {
+  await page.goto("/?from=old#x"); // ?thread= v2 сама убирает, открыв ветку, — берём любой другой
+  await expect(page).toHaveURL(/\/v2\/\?from=old#x$/);
+  await expect(page.locator("#cap")).toBeVisible();
+});
+
+// iPhone, приложение с экрана «Домой»: окно короче экрана на статус-бар (873 из 932). Овал тянется
+// на весь экран — и страница вокруг него не должна обрезать низ с доком
+test.describe("с экрана «Домой» на iPhone", () => {
+  test.use({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    viewport: { width: 430, height: 873 },
+    screen: { width: 430, height: 932 },
+  });
+  test("экран не обрезан снизу: док целиком внутри страницы", async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
+    await open(page);
+    const box = await page.evaluate(() => {
+      const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+      return { body: r("body").height, stage: r("#stage").height, dock: r(".dock").bottom };
+    });
+    expect(box.stage).toBe(932);
+    expect(box.body).toBe(932);
+    expect(box.dock).toBeLessThanOrEqual(932);
+    expect(box.dock).toBeGreaterThan(873); // док прижат к низу экрана, а не к низу окна
+  });
+});
+
 test("гость: запись и реакции — через регистрацию, слушать — до 30 голосов в месяц", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("sushhh.v2.member", "0"));
   await open(page);
