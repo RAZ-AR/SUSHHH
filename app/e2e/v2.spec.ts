@@ -227,3 +227,9 @@ test("название голоса: пишется перед публикац�
   await page.locator("#stories .st.mine").first().click();
   await expect(page.locator("#hook")).toHaveText("про утро и кофе");
 });
+
+test("корень сайта ведёт на овал и не теряет ?… из ссылки", async ({ page }) => {
+  await page.goto("/?from=old#x"); // ?thread= v2 сама убирает, открыв ветку, — берём любой другой
+  await expect(page).toHaveURL(/\/v2\/\?from=old#x$/);
+  await expect(page.locator("#cap")).toBeVisible();
+});
