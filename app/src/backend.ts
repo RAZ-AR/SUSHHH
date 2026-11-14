@@ -92,6 +92,36 @@ export function countPlay(postId: string) {
   if (sb && uid) void sb.rpc("count_play", { p_id: postId }).then(() => {});
 }
 
+// ---------- регистрация: код на почту ----------
+// Гость — анонимный вход Supabase. Регистрация привязывает почту к тому же аккаунту (данные остаются),
+// а на новом устройстве — входит в уже существующий. Почту никто, кроме самого человека, не видит:
+// в эфире он остаётся под псевдонимом.
+
+export type Member = "guest" | "member" | "unknown";
+export async function memberState(): Promise<Member> {
+  if (!sb || !uid) return "unknown";
+  const { data } = await sb.auth.getUser();
+  return data.user ? (data.user.is_anonymous ? "guest" : "member") : "unknown";
+}
+
+// отправить код на почту. "link" — привязываем почту к этому гостю; "signin" — такой человек уже есть,
+// входим в его аккаунт (записи этого гостя на этом устройстве останутся только на телефоне)
+export async function sendCode(email: string): Promise<{ mode: "link" | "signin" } | { error: string }> {
+  if (!sb || !uid) return { error: "offline" };
+  const link = await sb.auth.updateUser({ email });
+  if (!link.error) return { mode: "link" };
+  const taken = /already|registered|exists/i.test(link.error.message) || link.error.code === "email_exists";
+  if (!taken) return { error: link.error.code ?? link.error.message };
+  const otp = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  return otp.error ? { error: otp.error.code ?? otp.error.message } : { mode: "signin" };
+}
+
+export async function confirmCode(email: string, code: string, mode: "link" | "signin"): Promise<true | string> {
+  if (!sb) return "offline";
+  const { error } = await sb.auth.verifyOtp({ email, token: code, type: mode === "link" ? "email_change" : "email" });
+  return error ? (error.code ?? error.message) : true;
+}
+
 // ---------- уведомления об ответах ----------
 
 // подписка этого устройства: куда слать и на каком языке
