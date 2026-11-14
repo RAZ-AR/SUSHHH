@@ -13,12 +13,24 @@ test.beforeEach(async ({ page }) => {
   await page.route(/supabase\.co/, (r) => r.abort("internetdisconnected"));
 });
 
-test("без сети приложение открывается, эфир играет, корень и ссылки из уведомлений ведут в овал", async ({ page, context }) => {
-  await page.goto(`${URL}/v2/`);
+test("без сети приложение открывается, эфир играет, прежний адрес /v2/ и ссылки из уведомлений тоже", async ({ page, context }) => {
+  await page.goto(`${URL}/`);
   // первый запуск: service worker ставится и складывает приложение в кэш
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
   await page.reload();
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  // новая версия при установке спрашивает «вы приложение?» — приложение отвечает, и посреди записи
+  // она не включится сама (public/sw-update.js)
+  const answered = await page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const ch = new MessageChannel();
+        ch.port1.onmessage = (e) => resolve(e.data === true);
+        setTimeout(() => resolve(false), 1000);
+        navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "sushhh:app?" }, ports: [ch.port2] }));
+      }),
+  );
+  expect(answered).toBe(true);
 
   await context.setOffline(true);
   await page.reload();
@@ -34,9 +46,8 @@ test("без сети приложение открывается, эфир иг
   expect(part.range).toMatch(/^bytes 0-99\/\d+$/);
   expect(part.size).toBe(100);
 
-  // иконка на экране «Домой» открывает корень, уведомление — ?thread=
-  await page.goto(`${URL}/?from=home`);
-  await expect(page).toHaveURL(/\/v2\/\?from=home$/);
+  // старая иконка на экране «Домой» открывает /v2/, уведомление — v2/?thread=
+  await page.goto(`${URL}/v2/?from=home`);
   await expect(page.locator("#cap")).toBeVisible();
   await page.goto(`${URL}/v2/?thread=nope`);
   await expect(page.locator("#cap")).toBeVisible();
