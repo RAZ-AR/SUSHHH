@@ -204,3 +204,9 @@ test("языки голосов: выбираются в листе канало
   await expect(page.locator('[data-act="lang"][data-id="en"]')).toHaveAttribute("aria-pressed", "true");
   expect(await page.evaluate(() => localStorage.getItem("sushhh.v2.langs"))).toBe('["en"]');
 });
+
+test("корень сайта ведёт на овал и не теряет ?… из ссылки", async ({ page }) => {
+  await page.goto("/?from=old#x"); // ?thread= v2 сама убирает, открыв ветку, — берём любой другой
+  await expect(page).toHaveURL(/\/v2\/\?from=old#x$/);
+  await expect(page.locator("#cap")).toBeVisible();
+});

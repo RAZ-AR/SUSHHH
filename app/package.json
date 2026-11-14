@@ -15,8 +15,6 @@
   },
   "devDependencies": {
     "@fontsource/inter-tight": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
-    "@fontsource/onest": "^5.3.1",
     "@playwright/test": "^1.64.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -35,7 +33,6 @@
   },
   "dependencies": {
     "@mediabunny/aac-encoder": "^1.62.1",
-    "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "@supabase/supabase-js": "^2.119.0",
     "mediabunny": "^1.62.1"
   }
