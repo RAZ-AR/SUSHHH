@@ -1838,11 +1838,10 @@ function frame(t: number) {
   level += (raw - level) * (1 - Math.exp(-dt * (raw > level ? 22 : 6))); // растёт быстро, спадает плавно
   bump *= Math.exp(-dt * 5);
 
-  // В эфире стеклянный овал стоит на месте одного размера — играет он или на паузе. Голос меняет
-  // только то, что внутри (сияние со дна) и снаружи (ореол, отсвет на экране, кромка). На паузе
-  // овал не замирает совсем: едва заметно дышит
+  // Овал пульсирует от голоса везде, как при записи: в эфире он растёт с громкостью того, что звучит.
+  // На паузе овал не замирает совсем: едва заметно дышит
   const tg = { s: AIR_S + (calm || playing ? 0 : 0.012 * Math.sin(t / 1100)), b: 0.85, ring: 0, bg: 0.25, c: HOT };
-  if (state === "air" && playing) Object.assign(tg, { b: 1, bg: 0.6 + level * 0.4 });
+  if (state === "air" && playing) Object.assign(tg, { s: AIR_S + level * 0.2, b: 1, bg: 0.6 + level * 0.4 });
   if (state === "rec") Object.assign(tg, { s: 0.78 + level * 0.3, b: 1, bg: 0.7 + level * 0.3, c: LIVE });
   if (state === "review") Object.assign(tg, { s: 0.6 + level * 0.2, b: 1, ring: 1, bg: 0.5, c: LIVE });
   // запись улетает: лепестки собраны в луч
