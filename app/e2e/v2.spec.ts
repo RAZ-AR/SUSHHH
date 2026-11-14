@@ -205,6 +205,29 @@ test("языки голосов: выбираются в листе канало
   expect(await page.evaluate(() => localStorage.getItem("sushhh.v2.langs"))).toBe('["en"]');
 });
 
+test("название голоса: пишется перед публикацией и видно в эфире после перезагрузки", async ({ page }) => {
+  await open(page);
+  const name = page.locator("#name");
+  await expect(name).toBeHidden(); // в эфире поля нет
+
+  await page.locator("#stories .st.me").click();
+  await page.waitForTimeout(1200);
+  await page.locator("#main").click();
+  await expect(name).toBeVisible();
+  await expect(name).toHaveAttribute("placeholder", "Назови голос (необязательно)");
+  await name.fill("  про   утро и кофе  ");
+  await name.press("Enter"); // «Готово» прячет клавиатуру и ничего не публикует
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Опубликовать");
+
+  await page.locator("#main").click();
+  await expect(page.locator("#hint")).toContainText("Сохранено", { timeout: 5000 });
+  await expect(name).toBeHidden();
+
+  await page.reload();
+  await page.locator("#stories .st.mine").first().click();
+  await expect(page.locator("#hook")).toHaveText("про утро и кофе");
+});
+
 test("корень сайта ведёт на овал и не теряет ?… из ссылки", async ({ page }) => {
   await page.goto("/?from=old#x"); // ?thread= v2 сама убирает, открыв ветку, — берём любой другой
   await expect(page).toHaveURL(/\/v2\/\?from=old#x$/);

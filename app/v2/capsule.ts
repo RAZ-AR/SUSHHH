@@ -20,6 +20,7 @@ import { hasConsent } from "./privacy";
 import * as remote from "./remote";
 import { audible, langOf, toggle as toggleLang } from "./langs";
 import { keepFresh } from "./fresh";
+import { cleanTitle } from "./title";
 import { airFront, clearPlaying, openConsent, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -57,6 +58,12 @@ const liked = new Set<string>(); // голоса, на которые ты от�
 const heard = new Set<string>(); // что уже слушали — овал в сторис бледнеет
 
 const stage = $("stage");
+// название своего голоса: видно только перед публикацией
+const nameEl = $<HTMLInputElement>("name");
+nameEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") nameEl.blur(); // «Готово» на клавиатуре — спрятать её, публикует кнопка
+});
+
 
 // iPhone, приложение с экрана «Домой»: там 100dvh короче экрана на высоту статус-бара, и снизу
 // оставалась серая полоса. В этом режиме приложение всегда во весь экран — берём высоту экрана.
@@ -1241,12 +1248,18 @@ function send() {
   state = "sending";
   render();
   const buf = finalTake()!;
+  const caption = cleanTitle(nameEl.value);
+  nameEl.value = "";
+  nameEl.blur();
   const rec: Meta = {
     id: `m${Date.now()}`,
     kind: target.kind,
     to: target.kind === "reply" ? target.post.id : undefined,
     publish: true, // в общий эфир — с согласия, данного уже для сервера
-    title: target.kind === "reply" ? tr("titleReply", { name: target.post.name, dur: fmt(buf.duration) }) : tr("titleNew", { dur: fmt(buf.duration) }),
+    // без названия в «Моё» видна служебная подпись, а в эфир голос уходит без подписи:
+    // «Новая запись · 0:12» на языке автора другим людям ничего не говорит
+    title: caption || (target.kind === "reply" ? tr("titleReply", { name: target.post.name, dur: fmt(buf.duration) }) : tr("titleNew", { dur: fmt(buf.duration) })),
+    caption: caption || undefined,
     at: Date.now(),
   };
   const stored = pack(buf).then(
@@ -1275,6 +1288,8 @@ function send() {
 
 function backToAir() {
   if (state === "rec") stopRec(true);
+  nameEl.value = ""; // запись отменили — название к ней тоже
+  nameEl.blur();
   silence();
   state = "air";
   void playVoice(voice, heldF);
@@ -1410,6 +1425,9 @@ function render() {
   $("chan").innerHTML = `${esc(channelName)} ${ICON.down}`;
   $("chan").hidden = !air;
   $("hook").textContent = replying ? "" : v.hook;
+  nameEl.hidden = state !== "review";
+  nameEl.placeholder = tr(target.kind === "post" ? "nameVoice" : "nameReply");
+  nameEl.setAttribute("aria-label", nameEl.placeholder);
   drawStories(replying);
   if (voiceBuf === undefined) {
     clearTrack();
