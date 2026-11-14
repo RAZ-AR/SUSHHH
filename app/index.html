@@ -3,187 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#E9E9E6" />
-    <meta name="description" content="Live voices, one after another. Listen and reply with your voice." />
+    <meta name="theme-color" content="#0b0b0c" />
     <title>SUSHHH</title>
-    <!-- PWA: иконки и установка на iPhone (манифест подключает vite-plugin-pwa) -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="SUSHHH" />
-    <link rel="stylesheet" href="/src/styles.css" />
+    <!-- Старая версия («прибор») удалена: приложение — овал по адресу v2/. Корень, старые ссылки
+         и иконка на экране «Домой» ведут туда же, с тем же ?… и #… (например, ?thread= из уведомления) -->
+    <script>
+      location.replace("%BASE_URL%v2/" + location.search + location.hash);
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=%BASE_URL%v2/" /></noscript>
+    <style>
+      html { background: #0b0b0c; color-scheme: dark; }
+    </style>
   </head>
-  <body>
-    <!-- эфир: прибор. Сверху круглые экраны-сторис, в центре экран с волной, под ним решётка и клавиши -->
-    <section class="app view" id="home">
-      <!-- диапазоны приёмника; в очереди (ветка, «Моё») на их месте — «назад» и ряд светодиодов -->
-      <header class="top">
-        <nav class="switch3 bands" id="bands" data-i18n-aria="bandsAria">
-          <button class="pos" data-band="city"><i class="led"></i><span data-i18n="bandCityCaps"></span></button>
-          <button class="pos" data-band="own"><i class="led"></i><span data-i18n="bandOwnCaps"></span></button>
-          <button class="pos" data-band="rumor"><i class="led"></i><span data-i18n="bandRumorCaps"></span></button>
-        </nav>
-        <div class="context" id="context" hidden>
-          <button class="key sq" id="back" data-i18n-aria="backHome"><i data-i="left"></i></button>
-          <div class="segments" id="segments"></div>
-        </div>
-        <button class="key sq" id="moreBtn" data-i18n-aria="more" aria-haspopup="dialog"><i data-i="dots"></i></button>
-      </header>
-
-      <!-- шкала настройки: лента с голосами под неподвижной стрелкой -->
-      <div class="dial" id="dial" role="slider" tabindex="0" data-i18n-aria="dialAria" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1">
-        <div class="dial-scale" id="scale"><div class="dial-ticks"></div></div>
-        <div class="needle"></div>
-        <p class="dial-empty" id="dialEmpty" data-i18n="dialEmptyCaps" hidden></p>
-      </div>
-
-      <div class="device">
-        <div class="bezel">
-          <div class="screen stage" id="stage" data-i18n-aria="stageAria">
-            <canvas id="cv"></canvas>
-            <div class="scr-status" aria-hidden="true"><span class="clock-now"></span><span class="rec-dot"></span><span id="airState"></span><span class="grow"></span><span id="hallTag"></span><span id="voiceNo"></span></div>
-            <button class="start" id="startBtn" data-i18n-aria="startAria"><i data-i="play"></i><span data-i18n="startCaps"></span></button>
-            <div class="floaters" id="floaters"></div>
-            <p class="transcript" id="transcript" hidden></p>
-            <div class="scr-foot">
-              <p class="who call" id="who"></p>
-              <p class="hook" id="hook" role="button" tabindex="0" data-i18n-aria="hookAria"></p>
-              <p class="sig"><span class="bars" id="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="radius" id="radius"></span><span class="rumor" id="rumorTag"></span><span id="sigExtra"></span><span class="grow"></span><span id="time"></span></p>
-              <div class="hair" id="hair" role="slider" tabindex="0" data-i18n-aria="hairAria" aria-valuemin="0" aria-valuemax="100"><i id="hairFill"></i></div>
-            </div>
-            <p class="sr-only" aria-live="polite" id="live"></p>
-          </div>
-        </div>
-        <button class="knob" data-flip data-i18n-aria="flipAria"></button>
-      </div>
-
-      <!-- под экраном: клавиши памяти, решётка динамика, ветка -->
-      <div class="strip">
-        <button class="mem" data-m="0"><i></i>M1</button>
-        <button class="mem" data-m="1"><i></i>M2</button>
-        <button class="mem" data-m="2"><i></i>M3</button>
-        <button class="mem" data-m="3"><i></i>M4</button>
-        <canvas class="grille" id="grille" aria-hidden="true"></canvas>
-        <button class="label-pill" id="thread" data-i18n-aria="threadAria"><i data-i="message"></i><span id="threadCount"></span></button>
-      </div>
-
-      <div class="keys home-keys">
-        <button class="keycap big" id="playKey" data-i18n-aria="startAria"><span class="cap-btn"><i data-i="play"></i></span><span class="cap-label"><b id="playWord"></b><small id="playSub"></small></span></button>
-        <button class="keycap big orange" id="reply" data-i18n-aria="replyAria"><span class="cap-btn"><i data-i="mic"></i></span><span class="cap-label"><b data-i18n="replyCaps"></b><small data-i18n="replySub"></small></span></button>
-        <button class="keycap pad" data-pad="0"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
-        <button class="keycap pad" data-pad="1"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
-        <button class="keycap pad" data-pad="2"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
-        <button class="keycap pad" data-pad="3"><span class="cap-btn sm"></span><span class="cap-label"><b></b><small></small></span></button>
-        <div class="fan" id="fan" hidden></div>
-      </div>
-
-      <nav class="switch3" data-i18n-aria="sectionsAria">
-        <button class="pos on" data-go="home" data-i18n-aria="air" aria-current="page"><i class="led"></i><span data-i18n="airCaps"></span></button>
-        <button class="pos" data-rec data-i18n-aria="tabRec"><i class="led"></i><span data-i18n="recCaps"></span></button>
-        <button class="pos" data-go="mine" data-i18n-aria="tabMine"><i class="led"></i><span data-i18n="mineCaps"></span><b class="badge" data-badge hidden></b></button>
-      </nav>
-    </section>
-
-    <!-- моё: новые ответы одной клавишей, остальное — круглыми экранами -->
-    <section class="app view" id="mine" hidden>
-      <header class="print">
-        <div class="print-l">
-          <h1 class="print-title" data-i18n="mineCaps"></h1>
-          <canvas class="plus" data-plus aria-hidden="true"></canvas>
-          <p class="print-spec" id="mineSpec"></p>
-        </div>
-        <button class="me-head" id="meOpen" data-i18n-aria="openProfile"><canvas id="meThumb"></canvas><span id="meHeadName"></span></button>
-      </header>
-      <button class="keycap wide orange big-play" id="playNew"><span class="cap-btn sm"><i data-i="play"></i></span><span class="cap-label"><b id="playNewText"></b></span></button>
-      <div class="switch4 seg-tabs" role="tablist">
-        <button class="pos on" data-tab="toMe" role="tab" data-i18n-aria="tabToMe"><i class="led"></i><span data-i18n="tabToMeCaps"></span></button>
-        <button class="pos" data-tab="later" role="tab" data-i18n-aria="laterAria"><i class="led"></i><span data-i18n="laterCaps"></span></button>
-        <button class="pos" data-tab="posts" role="tab" data-i18n-aria="tabPosts"><i class="led"></i><span data-i18n="tabPostsCaps"></span></button>
-        <button class="pos" data-tab="sounds" role="tab" data-i18n-aria="tabSounds"><i class="led"></i><span data-i18n="tabSoundsCaps"></span></button>
-      </div>
-      <div class="grid" id="grid"></div>
-
-      <nav class="switch3" data-i18n-aria="sectionsAria">
-        <button class="pos" data-go="home" data-i18n-aria="air"><i class="led"></i><span data-i18n="airCaps"></span></button>
-        <button class="pos" data-rec data-i18n-aria="tabRec"><i class="led"></i><span data-i18n="recCaps"></span></button>
-        <button class="pos on" data-go="mine" data-i18n-aria="tabMine" aria-current="page"><i class="led"></i><span data-i18n="mineCaps"></span><b class="badge" data-badge hidden></b></button>
-      </nav>
-    </section>
-
-    <!-- кабинет: мой круглый экран, псевдоним, тихая статистика, настройки и данные -->
-    <section class="app view me-view" id="me" hidden>
-      <header class="top">
-        <button class="key sq" id="meBack" data-i18n-aria="backMine"><i data-i="left"></i></button>
-        <span class="top-title" data-i18n="profileCaps"></span>
-        <span class="key-gap"></span>
-      </header>
-      <div class="me-scroll">
-        <div class="me-disc" id="meStage" role="button" tabindex="0" data-i18n-aria="meOrbAria"><canvas id="meDisc"></canvas></div>
-        <p class="who" id="meName"></p>
-        <button class="keycap wide me-rename" id="meRename"><span class="cap-btn sm"><i data-i="rotate"></i></span><span class="cap-label"><b data-i18n="newName"></b></span></button>
-        <p class="me-note" data-i18n="nameNote"></p>
-        <div class="me-stats" id="meStats" role="group" data-i18n-aria="statsAria"></div>
-        <div class="me-list" id="meList"></div>
-      </div>
-      <nav class="switch3" data-i18n-aria="sectionsAria">
-        <button class="pos" data-go="home" data-i18n-aria="air"><i class="led"></i><span data-i18n="airCaps"></span></button>
-        <button class="pos" data-rec data-i18n-aria="tabRec"><i class="led"></i><span data-i18n="recCaps"></span></button>
-        <button class="pos on" data-go="mine" data-i18n-aria="tabMine" aria-current="page"><i class="led"></i><span data-i18n="mineCaps"></span><b class="badge" data-badge hidden></b></button>
-      </nav>
-    </section>
-
-    <!-- запись: тот же прибор, волна растёт слева направо. Пост до 30 с, ответ до 15 с -->
-    <div class="recorder" id="recorder" hidden>
-      <header class="print">
-        <div class="print-l">
-          <h1 class="print-title" data-i18n="recCaps"></h1>
-          <canvas class="plus" data-plus aria-hidden="true"></canvas>
-          <p class="print-spec"><span id="recWhat"></span><span data-i18n="recSpec"></span></p>
-        </div>
-        <button class="key sq" id="close" data-i18n-aria="close"><i data-i="x"></i></button>
-      </header>
-      <div class="device">
-        <div class="bezel">
-          <div class="screen" id="recStage">
-            <canvas id="cv2"></canvas>
-            <div class="scr-status" aria-hidden="true"><span class="clock-now"></span><span class="rec-dot"></span><span data-i18n="newRecCaps"></span></div>
-            <p class="rec-text" id="recText"></p>
-            <div class="scr-foot">
-              <p class="scr-time"><b id="recTime">0:00</b></p>
-              <div class="hair"><i id="recHairFill"></i></div>
-            </div>
-          </div>
-        </div>
-        <button class="knob" data-flip data-i18n-aria="flipAria"></button>
-      </div>
-      <p class="rec-note" id="recNote"></p>
-      <button class="label-pill rumor-toggle" id="rumorBtn" data-i18n-aria="rumorAria" aria-pressed="false"><i class="dot"></i><span data-i18n="rumorToggleCaps"></span></button>
-      <div class="keys rec-keys" id="recIdle">
-        <button class="keycap big rec-btn" id="recBtn" data-i18n-aria="startRec"><span class="cap-btn"><i data-i="mic"></i></span><span class="cap-label"><b data-i18n="recKey"></b><small data-i18n="recKeySub"></small></span></button>
-      </div>
-      <div class="keys rec-keys three" id="recDone" hidden>
-        <button class="keycap big" id="again" data-i18n-aria="again"><span class="cap-btn"><i data-i="rotate"></i></span><span class="cap-label"><b data-i18n="againCaps"></b></span></button>
-        <button class="keycap big" id="listenBack" data-i18n-aria="listenBack"><span class="cap-btn"><i data-i="play"></i></span><span class="cap-label"><b data-i18n="listenCaps"></b></span></button>
-        <button class="keycap big orange" id="publish" data-i18n-aria="publish"><span class="cap-btn"><i data-i="send"></i></span><span class="cap-label"><b data-i18n="sendCaps"></b></span></button>
-      </div>
-    </div>
-
-    <!-- лист действий -->
-    <div class="sheet-backdrop" id="sheet" hidden>
-      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">
-        <div class="sheet-grip"></div>
-        <p class="sheet-title" id="sheetTitle"></p>
-        <p class="sheet-sub" id="sheetSub"></p>
-        <div class="sheet-body" id="sheetBody"></div>
-        <button class="pill cancel" id="sheetCancel" data-i18n="cancel"></button>
-      </div>
-    </div>
-
-    <div class="toast" id="toast" role="status" hidden></div>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+  <body></body>
 </html>
