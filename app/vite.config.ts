@@ -37,9 +37,8 @@ const pwa = VitePWA({
     // + демо-голоса (≈1 МБ) и основные начертания шрифта: эфир играет даже в первый офлайн-запуск
     globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/inter-tight-{latin,cyrillic}-*-normal-*.woff2"],
     navigateFallback: `${base}index.html`,
-    navigateFallbackDenylist: [/\/v2\//], // приложение — своя страница; корень только ведёт на неё
-    // страница v2 хранится вместе со своими скриптами: приложение открывается и без сети.
-    // Новую версию v2 включает сама (v2/fresh.ts), поэтому в старой она не застрянет.
+    // страница приложения хранится вместе со своими скриптами: приложение открывается и без сети.
+    // Новую версию приложение включает само (v2/fresh.ts), поэтому в старой оно не застрянет.
     // Ссылки с ?… (?thread= из уведомления) — та же страница: параметры при поиске в кэше не важны
     ignoreURLParametersMatching: [/.*/],
     // сжатие голоса (Mediabunny, ≈1,7 МБ с запасным AAC) нужно только при отправке и только с сетью —
@@ -71,25 +70,28 @@ const pwa = VitePWA({
   },
 });
 
-// У v2 свой манифест: «На экран Домой» со страницы /v2/ должен открывать /v2/, а не старое приложение.
-// Плагин PWA вставляет общий манифест во все страницы — на v2 оставляем только свой.
-const v2Manifest: Plugin = {
-  name: "v2-manifest",
-  enforce: "post", // после плагина PWA — он тоже «post», и вставляет ссылку раньше нас
-  transformIndexHtml: {
-    order: "post",
-    handler: (html, ctx) =>
-      ctx.path.includes("/v2/")
-        ? html.replace(/<link rel="manifest" href="([^"]*)"\s*\/?>\s*/g, (tag, href: string) => (href.includes("/v2/") ? tag : ""))
-        : html,
+// Приложение живёт в корне сайта. Старый адрес /v2/ — та же страница: с него открываются иконки,
+// поставленные на экран «Домой» раньше, и уведомления, разосланные со ссылкой v2/?thread=.
+// В сборке — копия готовой страницы, в разработке — тот же ответ, что и для корня.
+const v2Alias: Plugin = {
+  name: "v2-alias",
+  enforce: "post",
+  configureServer(server) {
+    server.middlewares.use((req, _res, next) => {
+      if (req.url && /^\/v2\/?(?:[?#]|$)/.test(req.url)) req.url = "/" + req.url.replace(/^\/v2\/?/, "");
+      next();
+    });
+  },
+  generateBundle(_, bundle) {
+    const page = bundle["index.html"];
+    if (page?.type === "asset") this.emitFile({ type: "asset", fileName: "v2/index.html", source: page.source });
   },
 };
 
 // `npm run dev:phone` — HTTPS в локальной сети: без него телефон не даст доступ к микрофону
-// Приложение — «капсула» по адресу /v2/; корень сайта ведёт туда (старая версия удалена)
 export default defineConfig(({ mode }) => ({
   base,
-  plugins: [pwa, v2Manifest, ...(mode === "phone" ? [basicSsl()] : [])],
+  plugins: [pwa, v2Alias, ...(mode === "phone" ? [basicSsl()] : [])],
   // библиотеки, которые грузятся лениво (сжатие голоса, сервер), собираем заранее: иначе dev-сервер
   // пересобирает их при первом обращении и перезагружает страницу — посреди теста или записи
   // сияние (voice-glow) написано на React, а нужен ему только рендер и обычные хуки — Preact даёт то же
@@ -105,7 +107,6 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: { include: ["mediabunny", "@mediabunny/aac-encoder", "@supabase/supabase-js"] },
   build: {
     rollupOptions: {
-      input: { main: "index.html", v2: "v2/index.html" },
       output: {
         // куски Mediabunny — под узнаваемым именем, чтобы исключить их из офлайн-кэша
         chunkFileNames: (c) => (c.moduleIds.some((id) => id.includes("mediabunny")) ? "assets/mediabunny-[hash].js" : "assets/[name]-[hash].js"),

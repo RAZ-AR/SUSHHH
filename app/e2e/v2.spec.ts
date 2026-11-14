@@ -2,7 +2,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const open = async (page: Page) => {
-  await page.goto("/v2/");
+  await page.goto("/");
   await expect(page.locator("#hint")).toHaveText("коснись — и эфир заиграет");
 };
 // согласие на запись уже дано и подсказка жестов уже показана (init-скрипты повторяются при каждой загрузке,
@@ -228,8 +228,8 @@ test("название голоса: пишется перед публикац�
   await expect(page.locator("#hook")).toHaveText("про утро и кофе");
 });
 
-test("корень сайта ведёт на овал и не теряет ?… из ссылки", async ({ page }) => {
-  await page.goto("/?from=old#x"); // ?thread= v2 сама убирает, открыв ветку, — берём любой другой
+test("прежний адрес /v2/ открывает то же приложение (старые иконки и уведомления)", async ({ page }) => {
+  await page.goto("/v2/?from=old#x"); // ?thread= приложение само убирает, открыв ветку, — берём любой другой
   await expect(page).toHaveURL(/\/v2\/\?from=old#x$/);
   await expect(page.locator("#cap")).toBeVisible();
 });

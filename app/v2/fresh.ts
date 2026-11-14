@@ -11,6 +11,12 @@
 export function keepFresh(busy: () => boolean) {
   const sw = navigator.serviceWorker;
   if (!sw) return;
+  // новая версия при установке спрашивает, открыто ли приложение (public/sw-update.js): если да —
+  // она ждёт нашей команды, а не включается посреди записи
+  sw.addEventListener("message", (e) => {
+    if ((e.data as { type?: string } | null)?.type === "sushhh:app?") e.ports[0]?.postMessage(true);
+  });
+  sw.startMessages();
   // в разработке service worker не собирается — регистрировать нечего
   const base = import.meta.env.BASE_URL;
   const registered = import.meta.env.PROD ? sw.register(`${base}sw.js`, { scope: base }).catch(() => sw.getRegistration()) : sw.getRegistration();
