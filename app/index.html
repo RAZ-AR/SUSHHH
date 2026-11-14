@@ -245,7 +245,7 @@
       }
       .stage.dragging .shape { transition: none; }
       /* свечение вокруг овала: растёт и ярчает от громкости, цвет медленно плывёт */
-      /* овал в эфире стоит на месте — голос виден по ореолу: он растёт и ярчает сильнее самого стекла */
+      /* ореол растёт и ярчает от голоса сильнее самого стекла */
       .halo {
         scale: calc(var(--s) * (1.05 + var(--lv) * 0.24));
         background: var(--c);
@@ -1009,7 +1009,7 @@
       .st.me .oval, .st.mine .oval { --dc: var(--live); }
       .st.heard { opacity: 0.5; }
       .st.on { color: var(--ink); opacity: 1; }
-      .st.on .oval { --g: var(--lv); --rim-op: 1; --rim-w: 1.8px; }
+      .st.on .oval { --g: var(--lv); --rim-op: 1; --rim-w: 1.8px; scale: calc(1 + var(--lv) * 0.08); }
       .st:active .oval { scale: 0.95; }
 
       .chan { display: inline-flex; align-items: center; gap: 3px; min-height: 30px; padding: 0 10px; margin-top: 8px; border-radius: 15px; font-size: 12.5px; color: var(--ink-2); }
