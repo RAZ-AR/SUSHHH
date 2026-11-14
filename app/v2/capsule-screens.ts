@@ -8,6 +8,8 @@ import { REASONS, blockedNames, type ReportReason } from "./safety";
 import { MIN_AGE, eraseAll, giveConsent } from "./privacy";
 import { ALL_LANGS, chosen } from "./langs";
 import { disablePush, enablePush, pushState, type PushState } from "./push";
+import { GUEST_MONTHLY, becameMember, guestLeft, isMember } from "./account";
+import { confirmCode, sendCode } from "../src/backend";
 import type { Lang } from "../src/i18n";
 
 export type Tab = "air" | "mine";
@@ -31,8 +33,12 @@ type Api = {
   report(id: string, reason: ReportReason): void;
   unblock(name: string): void;
   removeAllMine(): Promise<void>; // удалить все свои записи с устройства
+  joined(): void; // регистрация прошла — открыть то, ради чего её просили
 };
-type Sheet = "channels" | "thread" | "mod" | "consent" | "privacy" | "delMine" | "erase";
+type Sheet = "channels" | "thread" | "mod" | "consent" | "privacy" | "delMine" | "erase" | "join";
+// регистрация: зачем открыли (запись, реакция, лимит гостя, из профиля), шаг и введённая почта
+export type JoinWhy = "record" | "react" | "limit" | "profile";
+let join: { why: JoinWhy; step: "email" | "code"; email: string; mode: "link" | "signin"; error: string; busy: boolean } | undefined;
 let consentFor: Target | undefined; // что человек хотел записать, когда его спросили о согласии
 let privacyFromConsent = false;
 // лист «⋯»: меню → причины жалобы → (если «нужна помощь») экран помощи; или подтверждение блокировки
@@ -77,6 +83,13 @@ export const inboxCount = () => unheard;
 export function initScreens(a: Api) {
   api = a;
   el("scrim").onclick = () => closeSheet();
+  // Enter в поле почты или кода — то же, что кнопка
+  el("sheet").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.target as HTMLElement).closest("#joinEmail, #joinCode")) {
+      e.preventDefault();
+      void joinStep();
+    }
+  });
   // согласие: кнопка «принимаю» оживает, только когда возраст подтверждён
   el("sheet").addEventListener("change", (e) => {
     const box = e.target as HTMLInputElement;
@@ -136,6 +149,53 @@ export function closeSheet(resume = true) {
 }
 
 const redraw = (scope: Scope) => (scope === "sheet" ? drawSheet() : drawPage());
+
+// регистрация по коду на почту — по касанию «записать», реакции, на лимите гостя или из «Моё»
+export function openJoin(why: JoinWhy) {
+  join = { why, step: "email", email: "", mode: "link", error: "", busy: false };
+  openSheet("join");
+  setTimeout(() => (el("joinEmail") as HTMLInputElement | null)?.focus(), 350);
+}
+const JOIN_ERR: Record<string, string> = {
+  offline: "joinErrOffline",
+  over_email_send_rate_limit: "joinErrRate",
+  email_address_invalid: "joinErrEmail",
+  validation_failed: "joinErrEmail",
+  otp_expired: "joinErrCode",
+  invalid_credentials: "joinErrCode",
+};
+async function joinStep() {
+  const j = join!;
+  if (j.busy) return;
+  if (j.step === "email") {
+    const email = (el("joinEmail") as HTMLInputElement).value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return void ((j.error = tr("joinErrEmail")), drawSheet());
+    j.busy = true;
+    j.email = email;
+    drawSheet();
+    const r = await sendCode(email);
+    j.busy = false;
+    if ("error" in r) j.error = tr(JOIN_ERR[r.error] ?? "joinErrSend");
+    else Object.assign(j, { step: "code", mode: r.mode, error: "" });
+    drawSheet();
+    if ((j.step as string) === "code") setTimeout(() => (el("joinCode") as HTMLInputElement | null)?.focus(), 50);
+  } else {
+    const code = (el("joinCode") as HTMLInputElement).value.replace(/\D/g, "");
+    // длина кода задаётся в Supabase («Email OTP length», сейчас 8) — поле принимает 6–10 цифр
+    if (code.length < 6) return void ((j.error = tr("joinErrCode")), drawSheet());
+    j.busy = true;
+    drawSheet();
+    const r = await confirmCode(j.email, code, j.mode);
+    j.busy = false;
+    if (r !== true) return void ((j.error = tr(JOIN_ERR[r] ?? "joinErrCode")), drawSheet());
+    // вошли в уже существующий аккаунт — перезапуск подтянет его эфир и записи
+    if (j.mode === "signin") return location.reload();
+    becameMember();
+    join = undefined;
+    closeSheet(false);
+    api.joined();
+  }
+}
 
 // перед первой записью: что будет с голосом, правила, возраст. Согласился — запись начинается сразу
 export function openConsent(t: Target) {
@@ -232,6 +292,12 @@ function act(a: string, id: string, scope: Scope) {
   } else if (a === "erase") openSheet("erase");
   else if (a === "erase-yes") void eraseAll();
   else if (a === "push") void togglePush();
+  else if (a === "join") openJoin("profile");
+  else if (a === "join-next") void joinStep();
+  else if (a === "join-back" && join) {
+    Object.assign(join, { step: "email", error: "" });
+    drawSheet();
+  }
   else if (a === "lang") {
     api.langs(id as Lang);
     drawSheet();
@@ -378,9 +444,10 @@ function drawPage() {
     const sent = myReplies().sort((a, b) => stamp(b.r.id) - stamp(a.r.id));
     const light = api.theme() === "light";
     page.innerHTML =
-      `<div class="me"><span class="dot big"></span><div><b>${esc(ME)}</b><span>${tr("myColor")}</span></div>
+      `<div class="me"><span class="dot big"></span><div><b>${esc(ME)}</b><span>${isMember() ? tr("memberYes") : tr("guestLeft", { n: guestLeft(), max: GUEST_MONTHLY })}</span></div>
          <button class="small" data-act="solid" aria-pressed="${api.solid()}" aria-label="${tr("solidMode")}" title="${tr("solidMode")}">${I.contrast}</button>
          <button class="small" data-act="theme" aria-label="${tr(light ? "darkTheme" : "lightTheme")}">${light ? I.moon : I.sun}</button></div>` +
+      (isMember() ? "" : `<button class="pill hot join" data-act="join">${I.mic} ${tr("joinCta")}</button>`) +
       // мои записи — вертикальные овалы, листаются вбок; первый начинает новую запись
       `<h2 class="sec">${tr("myRecordings")}</h2>
        <div class="vrow">
@@ -482,6 +549,19 @@ const confirmSheet = (title: string, sub: string, act: string, label: string) =>
 function drawSheet() {
   const s = el("sheet");
   if (sheetView === "mod") drawMod(s);
+  else if (sheetView === "join" && join) {
+    const j = join;
+    s.innerHTML =
+      `<div class="grab"></div><div class="sh-title lone">${tr("joinTitle")}</div>
+       <p class="sh-note">${tr(`joinWhy_${j.why}`, { max: GUEST_MONTHLY })} ${tr("joinPrivate", { name: esc(ME) })}</p>` +
+      (j.step === "email"
+        ? `<label class="field"><span>${tr("joinEmailLabel")}</span><input id="joinEmail" type="email" inputmode="email" autocomplete="email" value="${esc(j.email)}" placeholder="name@example.com" /></label>`
+        : `<p class="sh-note">${tr("joinSent", { email: esc(j.email) })}</p>
+           <label class="field"><span>${tr("joinCodeLabel")}</span><input id="joinCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]*" placeholder="••••••••" /></label>`) +
+      (j.error ? `<p class="field-err" role="alert">${j.error}</p>` : "") +
+      `<div class="tiles"><button class="tile mod care" data-act="join-next"${j.busy ? " disabled" : ""}><span class="mi">${j.step === "email" ? I.mic : I.check}</span><b>${tr(j.busy ? "joinBusy" : j.step === "email" ? "joinSend" : "joinConfirm")}</b></button></div>` +
+      (j.step === "code" ? `<div class="chips center"><button class="pill" data-act="join-back">${tr("joinOther")}</button></div>` : "");
+  }
   else if (sheetView === "consent")
     s.innerHTML =
       `<div class="grab"></div><div class="sh-title lone">${tr("consentTitle")}</div>

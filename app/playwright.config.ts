@@ -1,5 +1,6 @@
 // Сквозные тесты в настоящем браузере: `npm run e2e`.
 // Микрофон поддельный — Chromium подаёт в него ровный тон, поэтому запись не «молчит».
+import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 4180;
@@ -15,7 +16,16 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     permissions: ["microphone"],
     locale: "ru-RU", // тесты проверяют русские тексты; язык приложение берёт из системы
-    launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"] },
+    // поддельный микрофон подаёт ровный тон из файла: встроенные гудки Chromium идут с паузами,
+    // и короткая запись могла попасть в тишину — тогда приложение честно говорит «микрофон молчит»
+    launchOptions: {
+      args: [
+        "--use-fake-ui-for-media-stream",
+        "--use-fake-device-for-media-stream",
+        `--use-file-for-fake-audio-capture=${path.resolve("e2e/voice-tone.wav")}`,
+        "--autoplay-policy=no-user-gesture-required",
+      ],
+    },
     trace: "retain-on-failure",
   },
   webServer: [
