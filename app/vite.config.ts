@@ -38,11 +38,13 @@ const pwa = VitePWA({
     globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}", "seed/*.m4a", "assets/inter-tight-{latin,cyrillic}-*-normal-*.woff2"],
     navigateFallback: `${base}index.html`,
     navigateFallbackDenylist: [/\/v2\//], // приложение — своя страница; корень только ведёт на неё
-    // страницу v2 не кэшируем: старое приложение обновляется только с согласия, и v2 застревала бы
-    // в старой версии. Её скрипты с хэшем в имени кэшируются как обычно
+    // страница v2 хранится вместе со своими скриптами: приложение открывается и без сети.
+    // Новую версию v2 включает сама (v2/fresh.ts), поэтому в старой она не застрянет.
+    // Ссылки с ?… (?thread= из уведомления) — та же страница: параметры при поиске в кэше не важны
+    ignoreURLParametersMatching: [/.*/],
     // сжатие голоса (Mediabunny, ≈1,7 МБ с запасным AAC) нужно только при отправке и только с сетью —
     // не качаем его при установке приложения
-    globIgnores: ["**/node_modules/**/*", "v2/**", "assets/mediabunny*"],
+    globIgnores: ["**/node_modules/**/*", "assets/mediabunny*"],
     cleanupOutdatedCaches: true,
     // уведомления «Тебе ответили голосом»: показ и касание (public/push-sw.js)
     // и включение новой версии, когда открыта только удалённая старая (public/sw-update.js)
