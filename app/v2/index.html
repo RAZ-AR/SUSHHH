@@ -122,7 +122,9 @@
         color-scheme: light;
       }
       * { box-sizing: border-box; margin: 0; }
-      html, body { height: 100%; overflow: hidden; background: var(--page); }
+      /* с экрана «Домой» на iPhone страница короче экрана на высоту статус-бара: тянем её вместе
+         с овалом (--app-h, см. capsule.ts), иначе она обрезала низ — док и кнопки */
+      html, body { height: var(--app-h, 100%); overflow: hidden; background: var(--page); }
       @media (min-width: 500px) and (display-mode: browser) {
         html, body { background: color-mix(in srgb, var(--page), #000 35%); }
       }

@@ -458,7 +458,8 @@ function silence() {
 }
 
 // играть через <audio> с места from (0..1); buf — тот же голос расшифрованным, если уже есть
-function playEl(url: string, buf: AudioBuffer | undefined, onEnd: () => void, onFail: () => void, from = 0) {
+// onFail(true) — звук не сломан, его не дала включить система (iPhone без касания): нужно коснуться
+function playEl(url: string, buf: AudioBuffer | undefined, onEnd: () => void, onFail: (blocked?: boolean) => void, from = 0) {
   silence();
   const my = ticket;
   if (el.src !== new URL(url, location.href).href || el.error) el.src = url;
@@ -485,7 +486,7 @@ function playEl(url: string, buf: AudioBuffer | undefined, onEnd: () => void, on
     if (my !== ticket || e.name === "AbortError") return;
     elOn = false;
     playing = false;
-    onFail();
+    onFail(e.name === "NotAllowedError");
   });
 }
 
@@ -592,11 +593,12 @@ async function playVoice(i: number, from = 0) {
   const v = VOICES[voice];
   // не загрузилось: пауза с подсказкой, касание пробует снова. Дальше не листаем —
   // без сети следующие голоса не загрузились бы так же
-  const failed = () => {
+  const failed = (blocked = false) => {
     if (voice !== mine) return;
     paused = true;
-    say(tr("voiceFailed"));
-    render();
+    // не дали включить без касания — обычная пауза с «коснись», а не «не загрузился»
+    if (blocked) render();
+    else say(tr("voiceFailed"));
   };
   // лента рисуется по расшифрованному звуку; играет же <audio> сразу, не дожидаясь расшифровки
   const decoded = clipBuf(v).then(
