@@ -10,6 +10,7 @@ import { ALL_LANGS, chosen } from "./langs";
 import { disablePush, enablePush, pushState, type PushState } from "./push";
 import { GUEST_MONTHLY, becameMember, guestLeft, isMember } from "./account";
 import { confirmCode, sendCode } from "../src/backend";
+import { onHeardChange, quietNote, refreshHeard, setShowListens, showListens, stepOf } from "./heard";
 import type { Lang } from "../src/i18n";
 
 export type Tab = "air" | "mine";
@@ -111,6 +112,7 @@ function setTab(t: Tab) {
   el("page").classList.toggle("open", t !== "air");
   el("page").scrollTop = 0;
   drawPage();
+  if (t === "mine") loadHeard();
   api.refresh();
 }
 
@@ -292,6 +294,10 @@ function act(a: string, id: string, scope: Scope) {
   } else if (a === "erase") openSheet("erase");
   else if (a === "erase-yes") void eraseAll();
   else if (a === "push") void togglePush();
+  else if (a === "show-listens") {
+    setShowListens(!showListens());
+    drawPage();
+  }
   else if (a === "join") openJoin("profile");
   else if (a === "join-next") void joinStep();
   else if (a === "join-back" && join) {
@@ -434,6 +440,26 @@ async function togglePush() {
 const newReplies = () =>
   unheard ? `<button class="pill hot" data-act="new">${I.play} ${trn("newReplies", unheard)}</button>` : "";
 
+// «тебя услышали»: ответы от других людей (свои ответы себе не считаются)
+const othersOf = (p: Post) => p.replies.filter((r) => !r.mine).length;
+const myIds = () => MY_POSTS.filter((p) => p.remote).map((p) => p.id);
+// свежие цифры — при каждом заходе в «Моё» и при возвращении в приложение
+function loadHeard() {
+  void refreshHeard(myIds());
+}
+onHeardChange(() => {
+  if (tab === "mine") drawPage();
+});
+document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && tab === "mine" && loadHeard());
+// под последней записью: ступень отклика и, если дослушали, но пока молчат, — честная подсказка
+function heardLine() {
+  const last = [...MY_POSTS].reverse().find((p) => p.remote);
+  if (!last) return "";
+  const quiet = quietNote(last.id, othersOf(last));
+  const step = stepOf(last.id, othersOf(last));
+  return step || quiet ? `<p class="hintline" id="heardLine" aria-live="polite">${esc(tr("lastVoice"))}: ${esc(step)}${quiet ? `<br />${esc(quiet)}` : ""}</p>` : "";
+}
+
 function drawPage() {
   const page = el("page");
   if (tab === "mine") {
@@ -449,13 +475,14 @@ function drawPage() {
          <button class="small" data-act="theme" aria-label="${tr(light ? "darkTheme" : "lightTheme")}">${light ? I.moon : I.sun}</button></div>` +
       (isMember() ? "" : `<button class="pill hot join" data-act="join">${I.mic} ${tr("joinCta")}</button>`) +
       // мои записи — вертикальные овалы, листаются вбок; первый начинает новую запись
-      `<h2 class="sec">${tr("myRecordings")}</h2>
-       <div class="vrow">
+      `<h2 class="sec">${tr("myRecordings")}</h2>` +
+      heardLine() +
+      `<div class="vrow">
          <button class="tile tall add green" data-act="post" aria-label="${tr("recordNew")}">${I.plus}<b>${tr("newRecording")}</b></button>` +
       [...MY_POSTS].reverse().map((p) => {
         const tile = `<button class="tile tall green${now === p.id ? " playing" : ""}" data-act="play" data-id="${p.id}" aria-label="${tr(now === p.id ? "stopName" : "listenTo", { name: esc(p.hook) })}">
              <span class="tick">${now === p.id ? I.stop : I.play}</span><span class="clamp">${esc(p.hook)}</span>
-             <span class="count">${p.replies.length ? replies(p.replies.length) : ""}</span>
+             <span class="count">${p.remote ? esc(stepOf(p.id, othersOf(p))) : p.replies.length ? replies(p.replies.length) : ""}</span>
            </button>`;
         return deletable(p.id) ? `<div class="item t">${tile}${delBtn(p.id)}</div>` : tile;
       }).join("") +
@@ -480,6 +507,9 @@ function drawPage() {
       // мои данные: правила, удалить свои записи, удалить всё
       // уведомления об ответах: состояние узнаётся асинхронно — кнопку дорисует refreshPush()
       `<h2 class="sec">${tr("notifications")}</h2><div class="chips" id="pushRow">${pushChip(pushNow)}</div><p class="hintline" id="pushNote">${pushNote(pushNow)}</p>` +
+      // показывать ли авторам, что я дослушал их голос
+      `<h2 class="sec">${tr("listening")}</h2><div class="chips"><button class="pill" data-act="show-listens" aria-pressed="${showListens()}">${showListens() ? I.check : ""} ${tr("showListens")}</button></div>
+       <p class="hintline">${tr(showListens() ? "showListensOn" : "showListensOff")}</p>` +
       `<h2 class="sec">${tr("myData")}</h2><div class="chips">
          <button class="pill" data-act="privacy">${I.shield} ${tr("privacy")}</button>
          ${MY_POSTS.some((p) => deletable(p.id)) || myReplies().some(({ r }) => deletable(r.id)) ? `<button class="pill" data-act="del-mine">${I.trash} ${tr("deleteMine")}</button>` : ""}

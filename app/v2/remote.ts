@@ -9,6 +9,7 @@ import { encode } from "./encode";
 import { langTag } from "./langs";
 import { pendingReports } from "./safety";
 import { getRec, loadRecs, markSent, toBuffer, type Meta } from "./store";
+import { track } from "./track";
 
 export type Incoming = { posts: RemotePost[]; reactions: RemoteReaction[] };
 
@@ -100,6 +101,7 @@ async function send(meta: Meta, buf: AudioBuffer) {
   try {
     const ok = await upload(meta, buf);
     if (ok && meta.kind === "reply") notifyReply(meta.id); // автору голоса — «Тебе ответили голосом»
+    if (ok) track(meta.kind === "reply" ? "reply_published" : "published", { sec: Math.round(buf.duration) });
     return ok;
   } finally {
     inFlight--;

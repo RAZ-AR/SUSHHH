@@ -20,6 +20,14 @@ const noConsent = (page: Page) => page.addInitScript((k) => localStorage.removeI
 // касание капсулы — пауза или «играть»
 const tapCapsule = (page: Page) => page.locator("#cap").click();
 
+// новая запись: «+ ты», отсчёт 3-2-1 с подсказкой, касание микрофона начинает запись сразу
+const startRecording = async (page: Page) => {
+  await page.locator("#stories .st.me").click();
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Начать запись сразу");
+  await page.locator("#main").click();
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Остановить запись");
+};
+
 test("эфир играет по касанию", async ({ page }) => {
   await open(page);
   await tapCapsule(page);
@@ -32,8 +40,7 @@ test("запись: записать → опубликовать → после
   const mine = page.locator("#stories .st.mine");
   const before = await mine.count();
 
-  await page.locator('#stories .st.me').click(); // «+ ты» — новая запись
-  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Остановить запись");
+  await startRecording(page); // «+ ты» — новая запись
   await page.waitForTimeout(1500);
   await page.locator("#main").click();
   await expect(page.locator("#main")).toHaveAttribute("aria-label", "Опубликовать");
@@ -62,10 +69,35 @@ test("сбой сети не глушит эфир: после ошибки ка
   await expect(page.locator("#track")).toHaveAttribute("data-bars", /^\d+$/); // лента голоса готова
 });
 
-test("свернули приложение во время записи — запись остановлена, записанное ждёт в просмотре", async ({ page }) => {
+test("отсчёт перед записью: подсказка меняется касанием, запись идёт после отсчёта сама", async ({ page }) => {
   await open(page);
   await page.locator("#stories .st.me").click();
-  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Остановить запись");
+  const hook = page.locator("#hook");
+  await expect(hook).toHaveAttribute("role", "button");
+  await expect(page.locator("#hint")).toContainText("коснись микрофона");
+  const first = (await hook.textContent())!;
+  expect(first.length).toBeGreaterThan(5);
+  await hook.click();
+  await expect(hook).not.toHaveText(first); // другая подсказка
+  // без касаний отсчёт заканчивается сам, и идёт запись с таймером
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Остановить запись", { timeout: 4000 });
+  await expect(page.locator("#hint")).toHaveText(/0:0\d \/ 0:30/);
+});
+
+test("свернули приложение во время отсчёта — записи нет, снова эфир", async ({ page }) => {
+  await open(page);
+  await page.locator("#stories .st.me").click();
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Начать запись сразу");
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator("#main")).toHaveAttribute("aria-label", "Ответить голосом");
+});
+
+test("свернули приложение во время записи — запись остановлена, записанное ждёт в просмотре", async ({ page }) => {
+  await open(page);
+  await startRecording(page);
   await page.waitForTimeout(1200);
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
@@ -126,7 +158,7 @@ test("первая запись: сначала согласие и возрас
 test("«Удалить все мои данные» стирает записи, блокировки и согласие", async ({ page }) => {
   await open(page);
   // своя запись и заблокированный автор
-  await page.locator("#stories .st.me").click();
+  await startRecording(page);
   await page.waitForTimeout(1200);
   await page.locator("#main").click();
   await page.locator("#main").click();
@@ -211,7 +243,7 @@ test("название голоса: пишется перед публикац�
   const name = page.locator("#name");
   await expect(name).toBeHidden(); // в эфире поля нет
 
-  await page.locator("#stories .st.me").click();
+  await startRecording(page);
   await page.waitForTimeout(1200);
   await page.locator("#main").click();
   await expect(name).toBeVisible();

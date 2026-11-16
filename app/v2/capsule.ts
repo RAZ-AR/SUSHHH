@@ -22,6 +22,9 @@ import * as remote from "./remote";
 import { audible, langOf, toggle as toggleLang } from "./langs";
 import { keepFresh } from "./fresh";
 import { cleanTitle } from "./title";
+import { beginListen, endListen, listeningTo } from "./heard";
+import { track as logEvent } from "./track";
+import { hasSpeech, kindWord, nextPrompt } from "./prompts";
 import { airFront, clearPlaying, openConsent, openJoin, openModerate, getTab, inboxCount, initScreens, openSheet, showTab, stepChannel, type Tab, type Target } from "./capsule-screens";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -448,6 +451,7 @@ function silence() {
     src = undefined;
   }
   if (elOn) {
+    if (listeningTo()) endListen(elDur() ? el.currentTime / elDur() : 0); // докуда дослушали чужой голос
     ourPause = true;
     el.onended = el.onerror = null;
     el.pause();
@@ -496,6 +500,7 @@ el.addEventListener("pause", () => {
   if (ourPause || !elOn || el.ended) return;
   elOn = false;
   playing = false;
+  if (listeningTo()) endListen(elDur() ? el.currentTime / elDur() : 0);
   if (state === "air" && playingBuf === voiceBuf) {
     heldF = elDur() ? el.currentTime / elDur() : heldF;
     paused = true;
@@ -579,6 +584,7 @@ if (ms) {
 }
 
 async function playVoice(i: number, from = 0) {
+  stopNudge();
   paused = false;
   const changed = (i + VOICES.length) % VOICES.length !== voice || !voiceBuf;
   voice = (i + VOICES.length) % VOICES.length;
@@ -628,7 +634,18 @@ async function playVoice(i: number, from = 0) {
   if (voice !== mine || my !== ticket) return; // пока готовились, переключили голос или включили другое
   if (state !== "air" || !airFront()) return;
   passedF = from;
-  playEl(url, voiceBuf, () => state === "air" && void playVoice(voice + 1), failed, from);
+  const listen = v.remote && !v.mine;
+  const ended = () => {
+    if (listen) endListen(1);
+    logEvent("listened_full", { remote: !!v.remote });
+    if (state !== "air") return;
+    // сразу после чужого голоса — самый живой момент для ответа: микрофон пульсирует, подсказка — о чём
+    // сказать, и только потом следующий голос. С заблокированным экраном эфир идёт дальше без паузы
+    if (!v.mine && document.visibilityState === "visible") replyNudge(mine);
+    else void playVoice(voice + 1);
+  };
+  playEl(url, voiceBuf, ended, failed, from);
+  if (listen) beginListen(v.id); // автор видит «сейчас слушают», а потом — докуда дослушали
   void decoded;
   nowPlaying(v);
   render();
@@ -638,6 +655,25 @@ async function playVoice(i: number, from = 0) {
   heard.add(VOICES[voice].id);
   const next = VOICES[(voice + 1) % VOICES.length];
   void clipBuf(next).catch(() => {}); // следующий — заранее
+}
+
+// голос доиграл: 2,5 с микрофон пульсирует и подсказывает, как ответить; потом — следующий голос.
+// Коснулись микрофона — ответ этому голосу; перелистнули или поставили паузу — пауза отменяется
+const NUDGE_MS = 2500;
+let nudgeTimer = 0;
+function replyNudge(at: number) {
+  clearTimeout(nudgeTimer);
+  say(tr("replyNudge", { idea: nextPrompt("reply") }));
+  document.body.classList.add("nudge");
+  render();
+  nudgeTimer = window.setTimeout(() => {
+    document.body.classList.remove("nudge");
+    if (state === "air" && voice === at && !playing && !paused && airFront()) void playVoice(voice + 1);
+  }, NUDGE_MS);
+}
+function stopNudge() {
+  clearTimeout(nudgeTimer);
+  document.body.classList.remove("nudge");
 }
 
 // пауза: место запоминаем, звук останавливаем; продолжение — с того же места
@@ -1108,12 +1144,14 @@ async function startRec(t: Target = target) {
   if (!hasConsent()) return openConsent(t);
   starting = true;
   try {
+    logEvent("record_started", { kind: t.kind });
     await beginRec(t);
   } finally {
     starting = false;
   }
 }
 async function beginRec(t: Target) {
+  stopNudge();
   target = t;
   stopAir();
   const c = audio();
@@ -1159,23 +1197,48 @@ async function beginRec(t: Target) {
   sink.connect(c.destination);
   if (tapped) {
     const node = new AudioWorkletNode(c, "tap", { channelCount: 1, channelCountMode: "explicit" });
-    node.port.onmessage = (e) => state === "rec" && pcm.push(e.data as Float32Array);
+    node.port.onmessage = (e) => state === "rec" && !counting && pcm.push(e.data as Float32Array);
     tap = node;
   } else {
     const node = c.createScriptProcessor(4096, 1, 1);
-    node.onaudioprocess = (e) => state === "rec" && pcm.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    node.onaudioprocess = (e) => state === "rec" && !counting && pcm.push(new Float32Array(e.inputBuffer.getChannelData(0)));
     tap = node;
   }
   micNode.connect(tap);
   tap.connect(sink);
-  recStart = performance.now();
+  // подсказка «о чём сказать» и мягкий отсчёт 3-2-1: секунда собраться, а не паника «я уже в эфире».
+  // Микрофон уже открыт и свечение дышит от голоса, но пишем только после отсчёта
+  idea = nextPrompt(t.kind);
   state = "rec";
+  counting = 3;
+  clearTimeout(countTimer);
+  const tick = () => {
+    if (state !== "rec" || !counting) return;
+    if (--counting) {
+      render();
+      countTimer = window.setTimeout(tick, COUNT_MS);
+    } else goRec();
+  };
+  countTimer = window.setTimeout(tick, COUNT_MS);
+  render();
+}
+
+// отсчёт закончился или его пропустили касанием микрофона — пишем
+function goRec() {
+  clearTimeout(countTimer);
+  counting = 0;
+  pcm = [];
+  recStart = performance.now();
   // лимит — отдельным таймером: кадры анимации при заблокированном экране не идут
   clearTimeout(recTimer);
   recTimer = window.setTimeout(() => stopRec(), maxRec() * 1000);
   render();
 }
 
+const COUNT_MS = 700;
+let counting = 0; // 3, 2, 1 — идёт отсчёт; 0 — пишем
+let countTimer = 0;
+let idea = ""; // подсказка «о чём сказать» на время записи
 let recTimer = 0;
 function micLost() {
   if (state !== "rec") return;
@@ -1186,12 +1249,19 @@ function micLost() {
 // приложение свернули или заблокировали экран во время записи — заканчиваем её: записанное ждёт в просмотре
 const leave = () => document.visibilityState === "hidden" && micLost();
 document.addEventListener("visibilitychange", leave);
-addEventListener("pagehide", () => micLost());
+addEventListener("pagehide", () => {
+  micLost();
+  if (listeningTo() && elOn) endListen(elDur() ? el.currentTime / elDur() : 0); // закрыли посреди чужого голоса
+});
 
 // cancel — вышли крестиком: записанное выбрасываем молча
 function stopRec(cancel = false) {
   if (state !== "rec") return;
   clearTimeout(recTimer);
+  clearTimeout(countTimer);
+  // остановили во время отсчёта (крестик, свернули приложение) — записывать было нечего, выходим молча
+  if (counting) cancel = true;
+  counting = 0;
   recLen = Math.min(maxRec(), (performance.now() - recStart) / 1000);
   for (const tr of mic?.getAudioTracks() ?? []) tr.onended = null;
   micNode?.disconnect();
@@ -1234,6 +1304,8 @@ function stopRec(cancel = false) {
   take = buf;
   recLen = buf.duration;
   state = "review";
+  // одна фраза поддержки — только если в записи есть речь: пустую запись не хвалим
+  if (hasSpeech(ch, c.sampleRate)) say(`${kindWord()} · ${tr("onlyYou", { dur: fmt(recLen) })}`);
   render();
 }
 
@@ -1437,7 +1509,19 @@ function render() {
   more.setAttribute("aria-label", `${t1("more")}: ${v.name}`);
   $("chan").innerHTML = `${esc(channelName)} ${ICON.down}`;
   $("chan").hidden = !air;
-  $("hook").textContent = replying ? "" : v.hook;
+  // во время записи вместо названия голоса — подсказка «о чём сказать»; касание — другая
+  const ideaOn = state === "rec" && !!idea;
+  $("hook").textContent = ideaOn ? idea : replying ? "" : v.hook;
+  $("hook").classList.toggle("idea", ideaOn);
+  if (ideaOn) {
+    $("hook").setAttribute("role", "button");
+    $("hook").tabIndex = 0;
+    $("hook").setAttribute("aria-label", `${idea}. ${tr("anotherIdea")}`);
+  } else {
+    $("hook").removeAttribute("role");
+    $("hook").removeAttribute("tabindex");
+    $("hook").removeAttribute("aria-label");
+  }
   nameEl.hidden = state !== "review";
   nameEl.placeholder = tr(target.kind === "post" ? "nameVoice" : "nameReply");
   nameEl.setAttribute("aria-label", nameEl.placeholder);
@@ -1465,8 +1549,9 @@ function render() {
     $("srNext").textContent = tr("nextVoice");
     $("srPlay").textContent = tr(playing ? "pauseVoice" : "playVoice");
   } else if (state === "rec") {
-    setBtn(main, ICON.stop, tr("stopRec"));
-    $("label").textContent = tr("stop");
+    setBtn(main, counting ? ICON.mic : ICON.stop, tr(counting ? "startNow" : "stopRec"));
+    $("label").textContent = tr(counting ? "startNowShort" : "stop");
+    if (counting) $("hint").textContent = tr("countdown", { n: counting });
     setBtn($("left"), "", "", false);
     setBtn($("right"), "", "", false);
     $("left").classList.remove("on");
@@ -1492,8 +1577,20 @@ function render() {
   }
 }
 
+$("hook").onclick = () => {
+  if (state !== "rec" || !idea) return;
+  idea = nextPrompt(target.kind);
+  render();
+};
+$("hook").onkeydown = (e) => {
+  if (state === "rec" && idea && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    $("hook").click();
+  }
+};
 $("main").onclick = () => {
-  if (state === "rec") stopRec();
+  if (state === "rec" && counting) goRec(); // не ждать отсчёта
+  else if (state === "rec") stopRec();
   else if (state === "review") send();
 };
 $("left").onclick = () => {
@@ -1878,7 +1975,7 @@ function frame(t: number) {
     put("--c", `rgb(${cur.c.map(Math.round).join(" ")})`);
   }
 
-  if (state === "rec") {
+  if (state === "rec" && !counting) {
     const sec = (t - recStart) / 1000;
     $("hint").textContent = `${fmt(sec)} / ${fmt(maxRec())}`;
     if (sec >= maxRec()) stopRec();
@@ -1948,6 +2045,7 @@ keepFresh(() => state !== "air" || playing || starting || remote.uploading());
 applySafety(); // скрытое и заблокированное в прошлые разы — сразу не в эфире
 remote.setName(ME);
 remote.start(ME, mergeRemote, () => say(tr("published")));
+logEvent("opened");
 $("more").onclick = () => {
   const v = VOICES[voice];
   if (v && !v.mine) openModerate(v.id, v.name);
