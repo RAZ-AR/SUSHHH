@@ -92,6 +92,65 @@ export function countPlay(postId: string) {
   if (sb && uid) void sb.rpc("count_play", { p_id: postId }).then(() => {});
 }
 
+// докуда дослушали (0..1): сервер хранит наибольшее, 90% и больше — «дослушал» (миграция 20261116).
+// До миграции функции нет — ошибка не важна
+export function sendProgress(postId: string, f: number) {
+  if (sb && uid) void sb.rpc("play_progress", { p_id: postId, p_progress: Math.round(f * 1000) / 1000 }).then(() => {});
+}
+
+// про свои голоса: сколько послушали, сколько дослушали и кто (только те, кто разрешил показывать имя)
+export type Listens = { post_id: string; created_at: string; plays: number; completed: number; last_at: string | null; names: string[] };
+export async function fetchListens(): Promise<Listens[] | null> {
+  if (!sb || !uid) return null;
+  const { data, error } = await sb.rpc("my_listens");
+  return error ? null : ((data ?? []) as Listens[]);
+}
+
+// показывать ли авторам моё имя среди слушателей
+export async function saveShowListens(on: boolean) {
+  if (sb && uid) await sb.from("profiles").update({ show_listens: on }).eq("id", uid);
+}
+
+// ---------- «сейчас слушают» (Realtime Presence) ----------
+// У каждого голоса свой канал listen:<id>. Слушатель входит в канал того голоса, что играет, и выходит
+// по паузе или концу. В канале нет ни имени, ни id аккаунта — только случайный ключ этого запуска,
+// поэтому посторонний, подписавшись, узнает лишь число слушателей
+
+const presenceKey = Math.random().toString(36).slice(2);
+let hereCh: RealtimeChannel | null = null;
+let hereId = "";
+
+export function listenHere(postId: string | null) {
+  if (!sb || !uid || (postId ?? "") === hereId) return;
+  if (hereCh) void sb.removeChannel(hereCh);
+  hereCh = null;
+  hereId = postId ?? "";
+  if (!postId) return;
+  const ch = sb.channel(`listen:${postId}`, { config: { presence: { key: presenceKey } } });
+  hereCh = ch;
+  ch.subscribe((st) => {
+    if (st === "SUBSCRIBED" && hereCh === ch) void ch.track({});
+  });
+}
+
+// автор: сколько человек слушают его голоса прямо сейчас. Повторный вызов заменяет набор голосов
+const watched = new Map<string, RealtimeChannel>();
+export function watchListeners(ids: string[], cb: (id: string, n: number) => void) {
+  if (!sb || !uid) return;
+  const want = new Set(ids);
+  for (const [id, ch] of watched)
+    if (!want.has(id)) {
+      void sb.removeChannel(ch);
+      watched.delete(id);
+    }
+  for (const id of want) {
+    if (watched.has(id)) continue;
+    const ch = sb.channel(`listen:${id}`);
+    ch.on("presence", { event: "sync" }, () => cb(id, Object.keys(ch.presenceState()).length)).subscribe();
+    watched.set(id, ch);
+  }
+}
+
 // ---------- регистрация: код на почту ----------
 // Гость — анонимный вход Supabase. Регистрация привязывает почту к тому же аккаунту (данные остаются),
 // а на новом устройстве — входит в уже существующий. Почту никто, кроме самого человека, не видит:

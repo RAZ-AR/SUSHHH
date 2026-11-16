@@ -187,6 +187,40 @@ const D: Record<string, Row> = {
   ch_stories_note: ["things that happened", "случаи из жизни", "Erlebtes", "cosas que pasaron", "des choses vécues"],
   ch_city: ["City", "Город", "Stadt", "Ciudad", "Ville"],
   ch_city_note: ["Yerevan, right now", "Ереван, сейчас", "Jerewan, gerade jetzt", "Ereván, ahora", "Erevan, en ce moment"],
+  // подсказки во время записи и после чужого голоса
+  countdown: ["{n} · tap the mic to start now", "{n} · коснись микрофона, чтобы начать сразу", "{n} · tippe aufs Mikro, um sofort zu starten", "{n} · toca el micro para empezar ya", "{n} · touche le micro pour commencer tout de suite"],
+  startNow: ["Start recording now", "Начать запись сразу", "Aufnahme sofort starten", "Empezar a grabar ya", "Commencer l'enregistrement maintenant"],
+  startNowShort: ["Start", "Начать", "Start", "Empezar", "Commencer"],
+  anotherIdea: ["Tap for another idea", "Коснись — другая подсказка", "Tippe für eine andere Idee", "Toca para otra idea", "Touche pour une autre idée"],
+  replyNudge: ["Reply with your voice? {idea}", "Ответишь голосом? {idea}", "Mit der Stimme antworten? {idea}", "¿Respondes con tu voz? {idea}", "Tu réponds avec ta voix ? {idea}"],
+  // «тебя услышали»: ступени отклика у своих голосов
+  lastVoice: ["Your latest voice", "Последний голос", "Deine letzte Stimme", "Tu última voz", "Ta dernière voix"],
+  sentToAir: ["sent to the air", "отправлен в эфир", "ist im Live", "enviada al directo", "envoyée en direct"],
+  hearNow: ["listening now: {n}", "сейчас слушают: {n}", "hören gerade: {n}", "escuchando ahora: {n}", "à l'écoute : {n}"],
+  heardBy: ["heard to the end by {names}", "дослушали: {names}", "bis zum Ende gehört von {names}", "la escucharon entera: {names}", "écoutée jusqu'au bout par {names}"],
+  quietHint: [
+    "{who}. Sometimes people need a moment before they reply with their voice.",
+    "{who}. Иногда людям нужно время, чтобы ответить голосом.",
+    "{who}. Manchmal brauchen Menschen etwas Zeit, um mit der Stimme zu antworten.",
+    "{who}. A veces la gente necesita un momento para responder con la voz.",
+    "{who}. Parfois, il faut un peu de temps pour répondre avec sa voix.",
+  ],
+  listening: ["Listening", "Слушание", "Zuhören", "Escucha", "Écoute"],
+  showListens: ["Show authors that I listened", "Показывать авторам, что я дослушал", "Autor:innen zeigen, dass ich zugehört habe", "Mostrar a los autores que escuché", "Montrer aux auteurs que j'ai écouté"],
+  showListensOn: [
+    "Authors see your name among those who heard their voice to the end. It means a lot to them.",
+    "Авторы видят твоё имя среди тех, кто дослушал их голос до конца. Для них это много значит.",
+    "Autor:innen sehen deinen Namen unter denen, die ihre Stimme bis zum Ende gehört haben. Das bedeutet ihnen viel.",
+    "Los autores ven tu nombre entre quienes escucharon su voz hasta el final. Para ellos significa mucho.",
+    "Les auteurs voient ton nom parmi ceux qui ont écouté leur voix jusqu'au bout. Ça compte beaucoup pour eux.",
+  ],
+  showListensOff: [
+    "Authors only see how many people listened — without your name.",
+    "Авторы видят только, сколько человек дослушали, — без твоего имени.",
+    "Autor:innen sehen nur, wie viele zugehört haben — ohne deinen Namen.",
+    "Los autores solo ven cuántas personas escucharon, sin tu nombre.",
+    "Les auteurs voient seulement combien de personnes ont écouté, sans ton nom.",
+  ],
 };
 
 // множественное число: формы по правилам языка (Intl.PluralRules)
@@ -202,6 +236,19 @@ const P: Record<string, Partial<Record<Intl.LDMLPluralRule, Row>>> = {
     few: ["{n} replies", "{n} ответа", "{n} Antworten", "{n} respuestas", "{n} réponses"],
     many: ["{n} replies", "{n} ответов", "{n} Antworten", "{n} respuestas", "{n} réponses"],
     other: ["{n} replies", "{n} ответа", "{n} Antworten", "{n} respuestas", "{n} réponses"],
+  },
+  heardFull: {
+    one: ["heard to the end by {n}", "дослушал {n} человек", "{n} hat bis zum Ende gehört", "{n} la escuchó entera", "{n} l'a écoutée jusqu'au bout"],
+    few: ["heard to the end by {n}", "дослушали {n} человека", "{n} haben bis zum Ende gehört", "{n} la escucharon entera", "{n} l'ont écoutée jusqu'au bout"],
+    many: ["heard to the end by {n}", "дослушали {n} человек", "{n} haben bis zum Ende gehört", "{n} la escucharon entera", "{n} l'ont écoutée jusqu'au bout"],
+    other: ["heard to the end by {n}", "дослушали {n} человека", "{n} haben bis zum Ende gehört", "{n} la escucharon entera", "{n} l'ont écoutée jusqu'au bout"],
+  },
+  // начало подсказки quietHint: «Тебя дослушали до конца 2 человека. Иногда…»
+  heardFullWho: {
+    one: ["{n} person heard you to the end", "Тебя дослушал до конца {n} человек", "{n} Person hat dich bis zum Ende gehört", "{n} persona te escuchó hasta el final", "{n} personne t'a écouté jusqu'au bout"],
+    few: ["{n} people heard you to the end", "Тебя дослушали до конца {n} человека", "{n} Personen haben dich bis zum Ende gehört", "{n} personas te escucharon hasta el final", "{n} personnes t'ont écouté jusqu'au bout"],
+    many: ["{n} people heard you to the end", "Тебя дослушали до конца {n} человек", "{n} Personen haben dich bis zum Ende gehört", "{n} personas te escucharon hasta el final", "{n} personnes t'ont écouté jusqu'au bout"],
+    other: ["{n} people heard you to the end", "Тебя дослушали до конца {n} человека", "{n} Personen haben dich bis zum Ende gehört", "{n} personas te escucharon hasta el final", "{n} personnes t'ont écouté jusqu'au bout"],
   },
   newReplies: {
     one: ["{n} new reply", "{n} новый ответ", "{n} neue Antwort", "{n} respuesta nueva", "{n} nouvelle réponse"],
